@@ -201,14 +201,6 @@ CLI 会收集项目元数据，向所有支持的 AI TUI 安装 `update-agent-in
 
 `ai sandbox exec` 也会向容器透传一小组终端检测白名单变量（`TERM_PROGRAM`、`TERM_PROGRAM_VERSION`、`LC_TERMINAL`、`LC_TERMINAL_VERSION`）。这样可以让交互式 TUI 保持与宿主终端一致的行为，例如 Claude Code 的 `Shift+Enter` 换行支持，同时避免把整个宿主环境灌入容器。
 
-### Windows 沙箱前置条件
-
-在 Windows 上，`ai sandbox` 使用 WSL2 作为容器引擎边界。运行 `ai sandbox create` 前，请先准备 Windows 11、WSL2、默认 Linux distribution、Docker Desktop，并在 Docker Desktop 中为该 distribution 启用 WSL integration。
-
-你可以从 PowerShell 或 Git Bash 运行 CLI，但项目路径必须能被 WSL 访问，例如 `C:\Users\you\project`，或其他会挂载到 `/mnt/<drive>` 的磁盘路径。UNC 路径不支持作为沙箱挂载路径。如果 Windows 入口无法通过 WSL2 访问 Docker，可以进入对应 WSL distribution 后运行同一命令作为回退方案。
-
-`ai sandbox vm` 只管理 macOS 的 Colima VM。在 Windows 上，请使用 Docker Desktop 和 WSL2 自带工具管理后端。
-
 `ai sandbox refresh` 用于把宿主机 Claude Code 凭证同步到 `~/.agent-infra/credentials/*` 下的所有沙箱项目副本。它会检查宿主 Keychain 状态、在凭证过期时尝试 `claude /status` 探活、仅在字节不同时重写每个项目副本——这样 host token 轮换可以传播到正在运行的沙箱，无需重建。
 
 <a id="architecture-overview"></a>
@@ -300,7 +292,13 @@ Linux 直接使用宿主内核上的原生 Docker，没有受管 VM。`sandbox.v
 ### Windows
 
 - `ai init`、`ai sync` 等：执行 `npm install -g @fitlab-ai/agent-infra` 后理论上可用（需 Node.js >= 18）。本期未做主动验证。
-- `ai sandbox *`：Windows 通过 WSL2 + Docker Desktop 支持。参见 [Windows 沙箱前置条件](#windows-sandbox-prerequisites) 了解安装步骤。
+- `ai sandbox *`：Windows 通过 WSL2 + Docker Desktop 支持。
+
+运行 `ai sandbox create` 前，请先准备 Windows 11、WSL2、默认 Linux distribution、Docker Desktop，并在 Docker Desktop 中为该 distribution 启用 WSL integration。
+
+你可以从 PowerShell 或 Git Bash 运行 CLI，但项目路径必须能被 WSL 访问，例如 `C:\Users\you\project`，或其他会挂载到 `/mnt/<drive>` 的磁盘路径。UNC 路径不支持作为沙箱挂载路径。如果 Windows 入口无法通过 WSL2 访问 Docker，可以进入对应 WSL distribution 后运行同一命令作为回退方案。
+
+`ai sandbox vm` 只管理 macOS 的 Colima VM。在 Windows 上，请使用 Docker Desktop 和 WSL2 自带工具管理后端。
 
 #### 引擎资源配置
 

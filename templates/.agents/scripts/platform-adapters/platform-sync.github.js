@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { spawnSync } from "node:child_process";
+import spawn from "cross-spawn";
 
 const CHECK_TYPE = "platform-sync";
 const DEFAULT_RETRY_DELAYS_MS = [3000, 10000];
@@ -1034,7 +1034,7 @@ function resolveUpstreamRepo(taskDir) {
 }
 
 function resolveOwnerRepo(taskDir) {
-  const gitResult = spawnSync("git", ["remote", "get-url", "origin"], {
+  const gitResult = spawn.sync("git", ["remote", "get-url", "origin"], {
     cwd: taskDir,
     encoding: "utf8"
   });
@@ -1098,7 +1098,7 @@ function ghText(args, cwd) {
 
 function ghCommand(args, cwd) {
   const gh = resolveGhCommand();
-  const result = spawnSync(gh.command, [...gh.preArgs, ...args], {
+  const result = spawn.sync(gh.command, [...gh.preArgs, ...args], {
     cwd,
     encoding: "utf8",
     env: process.env
@@ -1137,7 +1137,7 @@ function ghPaginatedJson(args, cwd) {
 }
 
 function gitText(args, cwd) {
-  const result = spawnSync("git", args, {
+  const result = spawn.sync("git", args, {
     cwd,
     encoding: "utf8",
     env: process.env

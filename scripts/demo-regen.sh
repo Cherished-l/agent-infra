@@ -48,4 +48,14 @@ ffmpeg -y -i "$webm" -i /tmp/demo-palette.png \
   "$gif" 2>/dev/null
 
 # ── Normalize frame delays to fixed target duration ──
-node scripts/normalize-gif-duration.js "$gif" "$target_duration"
+# On Windows, python3 may be a Microsoft Store stub that exits non-zero;
+# probe both names and use whichever actually works.
+python=""
+for cmd in python3 python; do
+  if command -v "$cmd" >/dev/null 2>&1 && "$cmd" --version >/dev/null 2>&1; then
+    python=$cmd
+    break
+  fi
+done
+: "${python:=python3}"
+"$python" scripts/normalize-gif-duration.py "$gif" "$target_duration"
