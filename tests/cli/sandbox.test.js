@@ -383,7 +383,7 @@ test("loadConfig fails when .agents/.airc.json is missing", async () => {
   }
 });
 
-test("loadConfig falls back to USERPROFILE on Windows when HOME is unset", async () => {
+test("loadConfig uses os.homedir on Windows when HOME is unset", async () => {
   if (process.platform !== 'win32') {
     return;
   }
@@ -526,7 +526,8 @@ test("buildContainerEnvArgs injects GH_TOKEN when available", async () => {
   const envArgs = sandboxCreate.buildContainerEnvArgs([
     { tool: { envVars: { FOO: "bar" } } },
     { tool: { envVars: { BAZ: "qux" } } }
-  ], (cmd, args) => {
+  ], "native", (engine, cmd, args) => {
+    assert.equal(engine, "native");
     assert.equal(cmd, "gh");
     assert.deepEqual(args, ["auth", "token"]);
     return "token-123";
@@ -544,19 +545,17 @@ test("buildContainerEnvArgs skips GH_TOKEN when auth token is unavailable", asyn
 
   const envArgs = sandboxCreate.buildContainerEnvArgs([
     { tool: { envVars: { FOO: "bar" } } }
-  ], () => "");
+  ], "native", () => "");
 
   assert.deepEqual(envArgs, ["-e", "FOO=bar"]);
 });
 
-test("buildContainerEnvArgs uses engine-aware gh when engine is set", async () => {
+test("buildContainerEnvArgs uses engine-aware gh", async () => {
   const sandboxCreate = await loadFreshEsm("lib/sandbox/commands/create.js");
 
   const envArgs = sandboxCreate.buildContainerEnvArgs([
     { tool: { envVars: { FOO: "bar" } } }
-  ], () => {
-    throw new Error("should not call runSafe when engine is provided");
-  }, "wsl2", () => "");
+  ], "wsl2", () => "");
 
   assert.ok(envArgs.includes("-e"), "env args include -e flag");
   assert.deepEqual(envArgs, ["-e", "FOO=bar"]);
@@ -567,9 +566,7 @@ test("buildContainerEnvArgs includes GH_TOKEN from engine-aware runSafeEngine", 
 
   const envArgs = sandboxCreate.buildContainerEnvArgs([
     { tool: { envVars: { FOO: "bar" } } }
-  ], () => {
-    throw new Error("should not call runSafe when engine is provided");
-  }, "wsl2", () => "ghp_testtoken123");
+  ], "wsl2", () => "ghp_testtoken123");
 
   assert.deepEqual(envArgs, ["-e", "FOO=bar", "-e", "GH_TOKEN=ghp_testtoken123"]);
 });
@@ -1066,7 +1063,7 @@ test("buildImage uses verbose docker build output while keeping host UID/GID loo
 });
 
 test("windowsPathToWslPath converts drive paths and rejects UNC mounts", async () => {
-  const windowsPaths = await loadFreshEsm("lib/sandbox/windows-paths.js");
+  const windowsPaths = await loadFreshEsm("lib/sandbox/engines/wsl2-paths.js");
 
   assert.equal(
     windowsPaths.windowsPathToWslPath("F:\\ai\\agent-infra"),
@@ -1180,14 +1177,14 @@ test("buildImage converts Docker build paths for WSL2", async () => {
 });
 
 test("volumeArg converts host mount paths for WSL2", async () => {
-  const sandboxCreate = await loadFreshEsm("lib/sandbox/commands/create.js");
+  const wsl2Paths = await loadFreshEsm("lib/sandbox/engines/wsl2-paths.js");
 
   assert.equal(
-    sandboxCreate.volumeArg("wsl2", "F:\\repo\\.agents\\workspace", "/workspace/.agents/workspace"),
+    wsl2Paths.volumeArg("wsl2", "F:\\repo\\.agents\\workspace", "/workspace/.agents/workspace"),
     "/mnt/f/repo/.agents/workspace:/workspace/.agents/workspace"
   );
   assert.equal(
-    sandboxCreate.volumeArg("native", "/repo/.ssh", "/home/devuser/.ssh", ":ro"),
+    wsl2Paths.volumeArg("native", "/repo/.ssh", "/home/devuser/.ssh", ":ro"),
     "/repo/.ssh:/home/devuser/.ssh:ro"
   );
 });
@@ -2202,6 +2199,25 @@ test("sanitizeGitConfig rewrites Windows backslash and forward-slash host paths"
   assert.ok(!sanitized.includes("C:\\Users\\demo"), "backslash home path is rewritten");
   assert.ok(!sanitized.includes("C:/Users/demo"), "forward-slash home path is rewritten");
   assert.ok(sanitized.includes("/home/devuser"), "container home is used");
+});
+
+test("sanitizeGitConfig rewrites mixed-form Windows home paths", async () => {
+  const sandboxCreate = await loadFreshEsm("lib/sandbox/commands/create.js");
+  const home = "C:\\Users\\demo";
+  const gitconfig = [
+    "[core]",
+    "  excludesfile = C:/Users/demo\\.config\\git\\ignore",
+    "[user]",
+    "  signingKey = C:/Users/demo\\.gnupg\\pubring.kbx",
+    ""
+  ].join("\n");
+
+  const sanitized = sandboxCreate.sanitizeGitConfig(gitconfig, home, { repoRoot: "C:\\repo" });
+
+  assert.ok(!sanitized.includes("C:/Users/demo"), "mixed-form home path is rewritten");
+  assert.ok(!sanitized.includes("C:\\Users\\demo"), "backslash home path is rewritten");
+  assert.match(sanitized, /excludesfile = \/home\/devuser\/\.config\/git\/ignore/);
+  assert.match(sanitized, /signingKey = \/home\/devuser\/\.gnupg\/pubring\.kbx/);
 });
 
 test("sanitizeGitConfig appends missing safe.directory entries to an existing safe section", async () => {
