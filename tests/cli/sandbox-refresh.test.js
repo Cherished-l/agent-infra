@@ -193,35 +193,45 @@ test("refresh rejects positional arguments", async () => {
 
 test("refresh exits 1 with login prompt when host credentials are missing", async () => {
   const { refresh } = await loadFreshEsm("lib/sandbox/commands/refresh.js");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-refresh-missing-"));
   const stderr = [];
 
-  const code = await withPlatform("darwin", () => refresh([], {
-    discoverFn: () => ["agent-infra"],
-    execFn: () => {
-      throw new Error("missing");
-    },
-    writeStdout: () => {},
-    writeStderr: (chunk) => stderr.push(chunk)
-  }));
+  try {
+    const code = await withHome(tmpDir, () => withPlatform("darwin", () => refresh([], {
+      discoverFn: () => ["agent-infra"],
+      execFn: () => {
+        throw new Error("missing");
+      },
+      writeStdout: () => {},
+      writeStderr: (chunk) => stderr.push(chunk)
+    })));
 
-  assert.equal(code, 1);
-  assert.match(stderr.join(""), /claude \/login/);
+    assert.equal(code, 1);
+    assert.match(stderr.join(""), /claude \/login/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test("refresh exits 1 when probe fails after stale host credentials", async () => {
   const { refresh } = await loadFreshEsm("lib/sandbox/commands/refresh.js");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-refresh-stale-"));
   const stderr = [];
 
-  const code = await withPlatform("darwin", () => refresh([], {
-    discoverFn: () => ["agent-infra"],
-    execFn: () => "not-json",
-    spawnFn: () => ({ status: 1, stderr: "stale" }),
-    writeStdout: () => {},
-    writeStderr: (chunk) => stderr.push(chunk)
-  }));
+  try {
+    const code = await withHome(tmpDir, () => withPlatform("darwin", () => refresh([], {
+      discoverFn: () => ["agent-infra"],
+      execFn: () => "not-json",
+      spawnFn: () => ({ status: 1, stderr: "stale" }),
+      writeStdout: () => {},
+      writeStderr: (chunk) => stderr.push(chunk)
+    })));
 
-  assert.equal(code, 1);
-  assert.match(stderr.join(""), /claude \/login/);
+    assert.equal(code, 1);
+    assert.match(stderr.join(""), /claude \/login/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test("refresh succeeds after stale host credentials when probe restores valid credentials", async () => {
