@@ -4073,3 +4073,12 @@ test("resolveTaskBranch rejects missing task files and missing branch metadata",
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("sandbox ls format embeds Names and Status columns in stable order", async () => {
+  const { containerListFormat } = await loadFreshEsm("lib/sandbox/commands/ls.js");
+
+  assert.equal(
+    containerListFormat("proj.sandbox"),
+    '{{.Names}}\t{{.Status}}\t{{index .Labels "proj.sandbox.branch"}}'
+  );
+});
