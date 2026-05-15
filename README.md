@@ -276,6 +276,34 @@ agent-infra runs on macOS and Linux. The CLI itself only needs Node.js (>=22); c
 
 `vm.memory` and `--memory` values are expressed in GiB.
 
+#### SSH / locked keychain
+
+On macOS over SSH, the login keychain may be locked and reject non-interactive reads or writes with `errSecInteractionNotAllowed`. You can unlock it on the host and re-run `ai sandbox refresh`:
+
+```bash
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+ai sandbox refresh
+```
+
+For long-lived SSH sessions or CI, bypass the keychain with `AGENT_INFRA_CLAUDE_CREDENTIALS_FILE`. macOS stores Claude Code credentials in the keychain by default, so seed the override file once from a session where the keychain is unlocked:
+
+```bash
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+umask 077 && mkdir -p "$HOME/.agent-infra" && \
+  security find-generic-password -s "Claude Code-credentials" -w \
+  > "$HOME/.agent-infra/claude-credentials.json"
+chmod 600 "$HOME/.agent-infra/claude-credentials.json"
+```
+
+Then on the SSH / CI side:
+
+```bash
+export AGENT_INFRA_CLAUDE_CREDENTIALS_FILE="$HOME/.agent-infra/claude-credentials.json"
+ai sandbox refresh
+```
+
+After that, sandbox create, exec, and refresh use the file instead of the keychain for Claude Code credential reads and writes.
+
 ### Linux
 
 - `ai init`, `ai sync`, etc.: works out of the box after `npm install -g @fitlab-ai/agent-infra`.

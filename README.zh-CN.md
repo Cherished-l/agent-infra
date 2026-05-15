@@ -269,6 +269,34 @@ agent-infra 支持 macOS 和 Linux。CLI 本身只需要 Node.js (>=22)；容器
 
 `vm.memory` 和 `--memory` 的单位是 GiB。
 
+#### SSH / 锁定的 keychain
+
+在 macOS 上通过 SSH 使用时，login keychain 可能处于锁定状态，并以 `errSecInteractionNotAllowed` 拒绝非交互式读写。你可以在宿主机上解锁后重新运行 `ai sandbox refresh`：
+
+```bash
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+ai sandbox refresh
+```
+
+对于长期 SSH 会话或 CI，可以通过 `AGENT_INFRA_CLAUDE_CREDENTIALS_FILE` 绕过 keychain。macOS 默认把 Claude Code 凭据存进 keychain，所以需要先在 keychain 已解锁的会话中 seed 一次 override 文件：
+
+```bash
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+umask 077 && mkdir -p "$HOME/.agent-infra" && \
+  security find-generic-password -s "Claude Code-credentials" -w \
+  > "$HOME/.agent-infra/claude-credentials.json"
+chmod 600 "$HOME/.agent-infra/claude-credentials.json"
+```
+
+之后在 SSH / CI 侧设置：
+
+```bash
+export AGENT_INFRA_CLAUDE_CREDENTIALS_FILE="$HOME/.agent-infra/claude-credentials.json"
+ai sandbox refresh
+```
+
+此后 sandbox create、exec、refresh 读取和写入 Claude Code 凭据时都会使用该文件，而不是 keychain。
+
 ### Linux
 
 - `ai init`、`ai sync` 等：执行 `npm install -g @fitlab-ai/agent-infra` 后开箱即用。
