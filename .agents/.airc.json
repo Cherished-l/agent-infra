@@ -5,7 +5,7 @@
   "platform": {
     "type": "github"
   },
-  "templateVersion": "v0.5.9",
+  "templateVersion": "v0.5.10",
   "sandbox": {
     "engine": "orbstack",
     "runtimes": [
