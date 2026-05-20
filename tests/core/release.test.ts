@@ -44,7 +44,7 @@ test("release workflow publishes to npm on tag push", () => {
   assert.match(workflow, /run: npm test/);
   assert.match(workflow, /package\.json version \$PACKAGE_VERSION does not match tag \$GITHUB_REF_NAME/);
   assert.match(workflow, /id-token: write/);
-  assert.match(workflow, /npm install -g npm@11\b/);
+  assert.match(workflow, /node-version: 24/);
   assert.match(workflow, /npm publish --provenance/);
 });
 
