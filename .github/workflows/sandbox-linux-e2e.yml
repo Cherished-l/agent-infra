@@ -25,7 +25,6 @@ jobs:
   sandbox-linux:
     name: Linux native Docker sandbox lifecycle (${{ matrix.mode }})
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.mode == 'rootless' }} # TODO(#256 follow-up): remove once rootless matrix has 3+ green runs.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -156,8 +155,6 @@ jobs:
   sandbox-linux-debian:
     name: Linux native Docker sandbox lifecycle (debian-12)
     runs-on: ubuntu-latest
-    # TODO(#159 follow-up): remove continue-on-error after 3+ green runs.
-    continue-on-error: true
     timeout-minutes: 20
     container:
       image: debian:12-slim
