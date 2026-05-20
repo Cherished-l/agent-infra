@@ -39,7 +39,30 @@
 - `npm test` 全部通过
 - 待发布内容已经过代码审查
 - 本次变更的 PR 标签和标题足以生成准确的 GitHub Release Notes
-- 仓库中的 `NPM_TOKEN` GitHub Actions secret 有效，并具备 `@fitlab-ai/agent-infra` 发布权限
+- npmjs.com 已为 `@fitlab-ai/agent-infra` 配置 GitHub Actions Trusted Publisher（绑定字段见下文 [npm Trusted Publisher 配置](#npm-trusted-publisher-配置)）
+
+## npm Trusted Publisher 配置
+
+npm 发布走 GitHub Actions OIDC + npm Trusted Publishing，CI 不再读取长期 `NPM_TOKEN`。首次切换前，维护者必须在 npmjs.com 完成一次性绑定。
+
+### 一次性绑定字段（npmjs.com 侧）
+
+到 `https://www.npmjs.com/package/@fitlab-ai/agent-infra/access` → **Publishing access** → **Add Trusted Publisher**，填写：
+
+| 字段 | 取值 |
+|---|---|
+| Publisher | GitHub Actions |
+| Organization or user | `fitlab-ai` |
+| Repository | `agent-infra` |
+| Workflow filename | `release.yml` |
+| Environment name | 留空 |
+
+`Workflow filename` 必须与 `.github/workflows/release.yml` 完全一致；如未来重命名 workflow，需同步更新 npmjs.com 端绑定，否则发布步骤会因 OIDC 声明不匹配而 401/403。
+
+### 设计取舍
+
+- **Environment name 留空**：避免在 npmjs.com 与 workflow 之间多维护一个必须精确匹配的字段；仓库当前无 environment 级 reviewer approval 需求。
+- **`NPM_TOKEN` secret 不在代码中自动删除**：删除是一次性治理动作，必须由维护者在首次 OIDC 发布验证通过后手动到 GitHub Settings 执行。代码自动删除会破坏 [回滚到 token 发布模式（应急）](#回滚到-token-发布模式应急) 的兜底路径。
 
 ## 标准发布流程
 
@@ -71,10 +94,11 @@ git push origin vX.Y.Z
 
 - checkout 代码
 - 设置 Node.js 环境
+- 升级 npm 到支持 Trusted Publishing 的版本
 - 再次执行测试
 - 使用 `gh release create --generate-notes` 创建 GitHub Release
 - 校验 `package.json` 版本与 tag 一致
-- 使用 `npm publish --provenance` 发布 `@fitlab-ai/agent-infra`
+- 使用 GitHub Actions OIDC 和 `npm publish --provenance` 发布 `@fitlab-ai/agent-infra`
 
 `.github/release.yml` 负责定义自动生成发布说明时的分类规则。
 
@@ -94,11 +118,11 @@ git push origin vX.Y.Z
 
 - 校验 `package.json` 中的版本号与 Git tag 一致
 - 运行 `npm test`
-- 使用 `NODE_AUTH_TOKEN=${{ secrets.NPM_TOKEN }}` 执行 `npm publish --provenance`
+- 通过 GitHub Actions OIDC 和 npm Trusted Publishing 执行 `npm publish --provenance`
 
 发布前建议再次确认：
 
-- 仓库已配置有效的 `NPM_TOKEN` secret
+- npmjs.com 已完成 Trusted Publisher 绑定，字段值与上文 [npm Trusted Publisher 配置](#npm-trusted-publisher-配置) 一致
 - `fitlab-ai` scope 或对应组织权限已经在 npm 准备完成
 - 目标版本尚未在 npm registry 中存在
 
@@ -120,6 +144,8 @@ git push origin vX.Y.Z
 
 ## 回滚流程
 
+### 撤回错误版本（tag 回滚）
+
 如果本地发布准备完成后发现版本错误，可按 release 技能中的回滚步骤处理：
 
 ```bash
@@ -134,6 +160,26 @@ git checkout -- .
 git push origin --delete vX.Y.Z
 gh release delete vX.Y.Z --yes
 ```
+
+### 回滚到 token 发布模式（应急）
+
+如果首次 OIDC 发布因 npmjs.com Trusted Publisher 绑定缺失或字段不正确而失败：
+
+1. `git revert` 移除 release.yml 中删除 `NODE_AUTH_TOKEN` / `secrets.NPM_TOKEN` 的那次改动，让默认分支重新包含 token 模式 workflow，并记下这次恢复提交的 SHA（下文记为 `<revert-commit>`）。
+2. 如已删除 `NPM_TOKEN` GitHub secret，在 Settings → Secrets 重新生成。
+3. 重建已失败的 tag，让它指向 `<revert-commit>`——release workflow 读的是 tag 指向 commit 里的 workflow 文件，仅在分支上 revert 而不重建 tag，重跑仍会用回旧 commit 里的 OIDC workflow：
+
+   ```bash
+   git push origin --delete vX.Y.Z
+   gh release delete vX.Y.Z --yes        # 删除 tag 创建时自动生成的 GitHub Release
+   git tag -f vX.Y.Z <revert-commit>
+   git push origin vX.Y.Z
+   ```
+
+   注意：这会改变 `vX.Y.Z` 指向的 commit。如果发布策略不接受 tag 改写（签名审计、下游缓存等），改为在 `<revert-commit>` 上发布下一个补丁版本号（即 `vX.Y.{Z+1}`，例如失败的 `v1.2.3` 改发 `v1.2.4`）。
+4. 等 token 模式 release workflow 成功并完成 npm publish 后，再在另外的窗口排查 npmjs.com Trusted Publisher 绑定字段；修复后用新 alpha tag 重做 OIDC 切换。
+
+应急原则：先恢复已知可用的发布路径，再排查 npmjs.com 配置；不要在 release 卡住时反复改动 workflow。
 
 ## 后续优化边界
 
