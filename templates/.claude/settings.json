@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh .claude/hooks/check-version-format.sh",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.agents/hooks/check-version-format.sh\"",
             "timeout": 5
           }
         ]

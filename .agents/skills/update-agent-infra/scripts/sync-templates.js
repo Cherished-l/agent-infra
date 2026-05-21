@@ -55,7 +55,7 @@ const DEFAULTS = {
       ".agents/workflows/",
       ".agents/workspace/README.md",
       ".claude/commands/",
-      ".claude/hooks/",
+      ".agents/hooks/",
       ".gemini/commands/",
       ".git-hooks/check-version-format.sh",
       ".github/scripts/",

@@ -10,7 +10,7 @@ hook_command=$(
       try {
         const payload = JSON.parse(Buffer.concat(chunks).toString());
         process.stdout.write(payload.tool_input && payload.tool_input.command || "");
-      } catch (error) {
+      } catch {
         process.stdout.write("");
       }
     });
@@ -30,14 +30,14 @@ repo_root=$(
 )
 
 if sh "$repo_root/.git-hooks/check-version-format.sh"; then
-  echo "Claude hook: version check passed."
+  echo "AI hook: version check passed."
   exit 0
 else
   status=$?
 fi
 
 if [ "$status" -eq 1 ]; then
-  echo "Claude hook: blocking git commit (version format error)."
+  echo "AI hook: blocking git commit (version format error)." >&2
   exit 2
 fi
 

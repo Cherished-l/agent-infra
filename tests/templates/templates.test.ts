@@ -80,7 +80,7 @@ test("required template files were migrated into templates/", () => {
     "templates/.agents/scripts/validate-artifact.js",
     "templates/.git-hooks/check-version-format.sh",
     "templates/.git-hooks/pre-commit",
-    "templates/.claude/hooks/check-version-format.sh",
+    "templates/.agents/hooks/check-version-format.sh",
     "templates/.claude/settings.json",
     "templates/.claude/commands/archive-tasks.en.md",
     "templates/.claude/commands/archive-tasks.zh-CN.md",
@@ -176,7 +176,7 @@ test("update-agent-infra template copies stay in sync with working files", () =>
     [".agents/skills/update-agent-infra/scripts/sync-templates.js", "templates/.agents/skills/update-agent-infra/scripts/sync-templates.js"],
     [".agents/scripts/validate-artifact.js", "templates/.agents/scripts/validate-artifact.js"],
     [".git-hooks/check-version-format.sh", "templates/.git-hooks/check-version-format.sh"],
-    [".claude/hooks/check-version-format.sh", "templates/.claude/hooks/check-version-format.sh"],
+    [".agents/hooks/check-version-format.sh", "templates/.agents/hooks/check-version-format.sh"],
     ...buildCommandSyncFiles(project),
     ...referenceSyncFiles
   ];
@@ -236,8 +236,8 @@ test("version format validation hooks are wired into templates and local config"
   const templateClaudeSettings = JSON.parse(read("templates/.claude/settings.json"));
   const localCheckScript = read(".git-hooks/check-version-format.sh");
   const templateCheckScript = read("templates/.git-hooks/check-version-format.sh");
-  const localClaudeHook = read(".claude/hooks/check-version-format.sh");
-  const templateClaudeHook = read("templates/.claude/hooks/check-version-format.sh");
+  const localAiHook = read(".agents/hooks/check-version-format.sh");
+  const templateAiHook = read("templates/.agents/hooks/check-version-format.sh");
   const localPreCommit = read(".git-hooks/pre-commit");
   const templatePreCommit = read("templates/.git-hooks/pre-commit");
   const templateQuickstart = read("templates/.agents/QUICKSTART.en.md");
@@ -264,20 +264,20 @@ test("version format validation hooks are wired into templates and local config"
     assert.match(content, /Version format check passed\./, `${relativePath} should log successful validation`);
     assert.doesNotMatch(content, /package\.json/, `${relativePath} should not depend on package.json`);
     assert.doesNotMatch(content, /--pre-tool-use/, `${relativePath} should remain a pure git hook`);
-    assert.doesNotMatch(content, /tool_input/, `${relativePath} should not parse Claude hook payloads`);
+    assert.doesNotMatch(content, /tool_input/, `${relativePath} should not parse AI hook payloads`);
   });
 
   ([
-    [".claude/hooks/check-version-format.sh", localClaudeHook],
-    ["templates/.claude/hooks/check-version-format.sh", templateClaudeHook]
+    [".agents/hooks/check-version-format.sh", localAiHook],
+    ["templates/.agents/hooks/check-version-format.sh", templateAiHook]
   ] as Array<[string, string]>).forEach(([relativePath, content]) => {
-    assert.match(content, /tool_input/, `${relativePath} should parse the Claude hook payload`);
+    assert.match(content, /tool_input/, `${relativePath} should parse the AI hook payload`);
     assert.match(content, /hook_command/, `${relativePath} should use a descriptive command variable name`);
     assert.match(content, /git\\ commit \| git\\ commit\\ \*/, `${relativePath} should precisely match git commit commands in PreToolUse mode`);
     assert.match(content, /\.git-hooks\/check-version-format\.sh/, `${relativePath} should delegate to the git hook`);
-    assert.match(content, /exit 2/, `${relativePath} should map git-hook failures to Claude exit code 2`);
-    assert.match(content, /Claude hook: version check passed\./, `${relativePath} should log successful Claude-hook delegation`);
-    assert.match(content, /Claude hook: blocking git commit \(version format error\)\./, `${relativePath} should log blocked Claude-hook delegation`);
+    assert.match(content, /exit 2/, `${relativePath} should map git-hook failures to AI hook exit code 2`);
+    assert.match(content, /AI hook: version check passed\./, `${relativePath} should log successful AI-hook delegation`);
+    assert.match(content, /AI hook: blocking git commit \(version format error\)\./, `${relativePath} should log blocked AI-hook delegation`);
   });
 
   ([
@@ -317,7 +317,7 @@ test("version format validation hooks are wired into templates and local config"
           hooks: [
             {
               type: "command",
-              command: "sh .claude/hooks/check-version-format.sh",
+              command: "sh \"$(git rev-parse --show-toplevel)/.agents/hooks/check-version-format.sh\"",
               timeout: 5
             }
           ]
@@ -332,19 +332,19 @@ test("version format validation hooks are wired into templates and local config"
 test("version format validation hook only blocks git commit in PreToolUse mode", () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-version-hook-"));
   const hooksDir = path.join(tempRoot, ".git-hooks");
-  const claudeHooksDir = path.join(tempRoot, ".claude", "hooks");
+  const aiHooksDir = path.join(tempRoot, ".agents", "hooks");
   const configDir = path.join(tempRoot, ".agents");
 
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.mkdirSync(claudeHooksDir, { recursive: true });
+  fs.mkdirSync(aiHooksDir, { recursive: true });
   fs.mkdirSync(configDir, { recursive: true });
   fs.copyFileSync(".git-hooks/check-version-format.sh", path.join(hooksDir, "check-version-format.sh"));
-  fs.copyFileSync(".claude/hooks/check-version-format.sh", path.join(claudeHooksDir, "check-version-format.sh"));
+  fs.copyFileSync(".agents/hooks/check-version-format.sh", path.join(aiHooksDir, "check-version-format.sh"));
   fs.writeFileSync(path.join(configDir, ".airc.json"), JSON.stringify({ templateVersion: "v1.2.3" }));
 
-  const runClaudeHook = (input: string) => spawnSync(
+  const runAiHook = (input: string) => spawnSync(
     "sh",
-    [path.join(claudeHooksDir, "check-version-format.sh")],
+    [path.join(aiHooksDir, "check-version-format.sh")],
     {
       cwd: tempRoot,
       encoding: "utf8",
@@ -353,20 +353,20 @@ test("version format validation hook only blocks git commit in PreToolUse mode",
   );
 
   try {
-    const nonCommit = runClaudeHook(JSON.stringify({ tool_input: { command: "git status" } }));
+    const nonCommit = runAiHook(JSON.stringify({ tool_input: { command: "git status" } }));
     assert.equal(nonCommit.status, 0, "PreToolUse should skip non-git-commit commands");
     assert.equal(nonCommit.stdout, "", "PreToolUse should stay silent when skipping non-git-commit commands");
 
-    const commit = runClaudeHook(JSON.stringify({ tool_input: { command: "git commit -m test" } }));
+    const commit = runAiHook(JSON.stringify({ tool_input: { command: "git commit -m test" } }));
     assert.equal(commit.status, 0, "PreToolUse should validate git commit commands");
     assert.match(commit.stdout, /Version format check passed\./, "PreToolUse should log successful validation");
-    assert.match(commit.stdout, /Claude hook: version check passed\./, "PreToolUse should log successful Claude-hook delegation");
+    assert.match(commit.stdout, /AI hook: version check passed\./, "PreToolUse should log successful AI-hook delegation");
 
     fs.writeFileSync(path.join(configDir, ".airc.json"), JSON.stringify({ templateVersion: "1.2.3" }));
 
-    const blockedCommit = runClaudeHook(JSON.stringify({ tool_input: { command: "git commit -m broken" } }));
+    const blockedCommit = runAiHook(JSON.stringify({ tool_input: { command: "git commit -m broken" } }));
     assert.equal(blockedCommit.status, 2, "PreToolUse should block invalid git commit commands with exit 2");
-    assert.match(blockedCommit.stdout, /Claude hook: blocking git commit \(version format error\)\./, "PreToolUse should log blocked Claude-hook delegation");
+    assert.match(blockedCommit.stderr, /AI hook: blocking git commit \(version format error\)\./, "PreToolUse should log blocked AI-hook delegation");
 
     const preCommit = spawnSync(
       "sh",
