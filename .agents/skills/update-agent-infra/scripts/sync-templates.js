@@ -31,8 +31,8 @@ const DEFAULTS = {
     "tools": [
       "claude-code",
       "codex",
-      "opencode",
-      "gemini-cli"
+      "gemini-cli",
+      "opencode"
     ],
     "dockerfile": null,
     "vm": {
@@ -48,6 +48,7 @@ const DEFAULTS = {
     "managed": [
       ".agents/QUICKSTART.md",
       ".agents/README.md",
+      ".agents/hooks/",
       ".agents/rules/",
       ".agents/scripts/",
       ".agents/skills/",
@@ -55,7 +56,7 @@ const DEFAULTS = {
       ".agents/workflows/",
       ".agents/workspace/README.md",
       ".claude/commands/",
-      ".agents/hooks/",
+      ".codex/hooks.json",
       ".gemini/commands/",
       ".git-hooks/check-version-format.sh",
       ".github/scripts/",

@@ -710,6 +710,23 @@ test("syncTemplates syncs the managed shared hook as a single file", async () =>
       ".git-hooks/check-version-format.sh",
       "#!/bin/sh\necho shared hook\n"
     );
+    writeJson(templateRoot, ".codex/hooks.json", {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "^Bash$",
+            hooks: [
+              {
+                type: "command",
+                command: "sh \"$(git rev-parse --show-toplevel)/.agents/hooks/check-version-format.sh\"",
+                timeout: 5,
+                statusMessage: "Checking template version before git commit"
+              }
+            ]
+          }
+        ]
+      }
+    });
 
     writeJson(projectRoot, ".agents/.airc.json", {
       project: "demo",
@@ -740,10 +757,19 @@ test("syncTemplates syncs the managed shared hook as a single file", async () =>
         (entry) => entry.entry === ".git-hooks/check-version-format.sh" && entry.list === "managed"
       )
     );
-    assert.deepEqual(report.managed.created, [".git-hooks/check-version-format.sh"]);
+    assert.ok(
+      report.registryAdded.some(
+        (entry) => entry.entry === ".codex/hooks.json" && entry.list === "managed"
+      )
+    );
+    assert.deepEqual(report.managed.created.sort(), [".codex/hooks.json", ".git-hooks/check-version-format.sh"]);
     assert.equal(
       fs.readFileSync(path.join(projectRoot, ".git-hooks/check-version-format.sh"), "utf8"),
       "#!/bin/sh\necho shared hook\n"
+    );
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(projectRoot, ".codex", "hooks.json"), "utf8")),
+      JSON.parse(fs.readFileSync(path.join(templateRoot, ".codex", "hooks.json"), "utf8"))
     );
     if (supportsPosixModeBits()) {
       assert.notEqual(

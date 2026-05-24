@@ -14,8 +14,8 @@
     "tools": [
       "claude-code",
       "codex",
-      "opencode",
-      "gemini-cli"
+      "gemini-cli",
+      "opencode"
     ],
     "dockerfile": null,
     "vm": {
@@ -37,14 +37,15 @@
         "tests/templates/"
       ],
       "core": [
-        "scripts/",
         "assets/",
+        "scripts/",
         "tests/core/"
       ]
     }
   },
   "files": {
     "managed": [
+      ".agents/hooks/",
       ".agents/rules/",
       ".agents/scripts/",
       ".agents/skills/",
@@ -52,19 +53,21 @@
       ".agents/workflows/",
       ".agents/workspace/README.md",
       ".claude/commands/",
-      ".agents/hooks/",
+      ".codex/hooks.json",
       ".gemini/commands/",
       ".git-hooks/check-version-format.sh",
-      ".opencode/commands/",
-      ".github/scripts/"
+      ".github/scripts/",
+      ".opencode/commands/"
     ],
     "merged": [
+      "**/post-release.*",
       "**/release.*",
       "**/test-integration.*",
       "**/test.*",
       "**/upgrade-dependency.*",
       ".agents/QUICKSTART.md",
       ".agents/README.md",
+      ".agents/skills/post-release/SKILL.*",
       ".agents/skills/release/SKILL.*",
       ".agents/skills/test-integration/SKILL.*",
       ".agents/skills/test/SKILL.*",
@@ -78,9 +81,7 @@
       ".gitignore",
       ".opencode/COMMAND_STYLE_GUIDE.md",
       ".opencode/README.md",
-      "AGENTS.md",
-      "**/post-release.*",
-      ".agents/skills/post-release/SKILL.*"
+      "AGENTS.md"
     ],
     "ejected": [
       ".agents/rules/cross-platform-tests.md"

@@ -49,7 +49,7 @@ test(".agents/.airc.json declares labels.in mapping for module labels", () => {
   assert.deepEqual(collaborator.labels.in, {
     cli: ["bin/", "lib/", "src/", "tests/cli/"],
     templates: ["templates/", "tests/templates/"],
-    core: ["scripts/", "assets/", "tests/core/"]
+    core: ["assets/", "scripts/", "tests/core/"]
   });
 });
 
@@ -59,7 +59,7 @@ test(".agents/.airc.json declares default sandbox configuration", () => {
   assert.deepEqual(collaborator.sandbox, {
     engine: "orbstack",
     runtimes: ["node20"],
-    tools: ["claude-code", "codex", "opencode", "gemini-cli"],
+    tools: ["claude-code", "codex", "gemini-cli", "opencode"],
     dockerfile: null,
     vm: {
       cpu: null,
@@ -89,6 +89,10 @@ test(".agents/.airc.json excludes deprecated codex prompt paths", () => {
   assert.ok(
     collaborator.files.managed.includes(".agents/hooks/"),
     ".agents/hooks/ should be in managed list"
+  );
+  assert.ok(
+    collaborator.files.managed.includes(".codex/hooks.json"),
+    ".codex/hooks.json should be in managed list"
   );
   assert.ok(
     !collaborator.files.managed.includes(".codex/commands/"),

@@ -82,7 +82,7 @@ test("agent-infra init generates seed files in a temp directory", () => {
     assert.deepEqual(config.sandbox, {
       engine: DEFAULT_SANDBOX_ENGINE,
       runtimes: ["node20"],
-      tools: ["claude-code", "codex", "opencode", "gemini-cli"],
+      tools: ["claude-code", "codex", "gemini-cli", "opencode"],
       dockerfile: null,
       vm: { cpu: null, memory: null, disk: null }
     }, "init should generate default sandbox config");
@@ -93,6 +93,7 @@ test("agent-infra init generates seed files in a temp directory", () => {
     );
     assert.ok(config.files.managed.includes(".agents/scripts/"), ".agents/scripts/ should be managed");
     assert.ok(config.files.managed.includes(".agents/hooks/"), ".agents/hooks/ should be managed");
+    assert.ok(config.files.managed.includes(".codex/hooks.json"), ".codex/hooks.json should be managed");
     assert.ok(!config.files.managed.includes(".editorconfig"), ".editorconfig should not be managed");
     assert.ok(!config.files.merged.includes(".mailmap"), ".mailmap should not be merged");
     [
@@ -483,13 +484,14 @@ test("agent-infra update refreshes seed files and syncs file registry", () => {
     assert.deepEqual(updated.sandbox, {
       engine: null,
       runtimes: ["node20"],
-      tools: ["claude-code", "codex", "opencode", "gemini-cli"],
+      tools: ["claude-code", "codex", "gemini-cli", "opencode"],
       dockerfile: null,
       vm: { cpu: null, memory: null, disk: null }
     }, "update should backfill default sandbox config");
     assert.deepEqual(updated.labels, { in: {} }, "update should backfill empty labels.in defaults");
     assert.ok(updated.files.managed.includes(".git-hooks/check-version-format.sh"));
     assert.ok(updated.files.managed.includes(".agents/skills/"));
+    assert.ok(updated.files.managed.includes(".codex/hooks.json"));
     assert.ok(updated.files.merged.includes("**/test.*"));
 
     const skill = fs.readFileSync(

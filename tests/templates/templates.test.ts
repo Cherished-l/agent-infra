@@ -81,6 +81,7 @@ test("required template files were migrated into templates/", () => {
     "templates/.git-hooks/check-version-format.sh",
     "templates/.git-hooks/pre-commit",
     "templates/.agents/hooks/check-version-format.sh",
+    "templates/.codex/hooks.json",
     "templates/.claude/settings.json",
     "templates/.claude/commands/archive-tasks.en.md",
     "templates/.claude/commands/archive-tasks.zh-CN.md",
@@ -177,6 +178,7 @@ test("update-agent-infra template copies stay in sync with working files", () =>
     [".agents/scripts/validate-artifact.js", "templates/.agents/scripts/validate-artifact.js"],
     [".git-hooks/check-version-format.sh", "templates/.git-hooks/check-version-format.sh"],
     [".agents/hooks/check-version-format.sh", "templates/.agents/hooks/check-version-format.sh"],
+    [".codex/hooks.json", "templates/.codex/hooks.json"],
     ...buildCommandSyncFiles(project),
     ...referenceSyncFiles
   ];
@@ -234,6 +236,8 @@ test("version format validation hooks are wired into templates and local config"
   const collaborator = JSON.parse(read(".agents/.airc.json"));
   const rootClaudeSettings = JSON.parse(read(".claude/settings.json"));
   const templateClaudeSettings = JSON.parse(read("templates/.claude/settings.json"));
+  const rootCodexHooks = JSON.parse(read(".codex/hooks.json"));
+  const templateCodexHooks = JSON.parse(read("templates/.codex/hooks.json"));
   const localCheckScript = read(".git-hooks/check-version-format.sh");
   const templateCheckScript = read("templates/.git-hooks/check-version-format.sh");
   const localAiHook = read(".agents/hooks/check-version-format.sh");
@@ -324,6 +328,30 @@ test("version format validation hooks are wired into templates and local config"
         }
       ],
       `${relativePath} should configure the PreToolUse version format validation hook`
+    );
+    assert.equal(settings.hooks?.PostToolUse, undefined, `${relativePath} should not configure a PostToolUse reminder hook`);
+  });
+
+  ([
+    [".codex/hooks.json", rootCodexHooks],
+    ["templates/.codex/hooks.json", templateCodexHooks]
+  ] as Array<[string, { hooks?: { PreToolUse?: unknown; PostToolUse?: unknown } }]>).forEach(([relativePath, settings]) => {
+    assert.deepEqual(
+      settings.hooks?.PreToolUse,
+      [
+        {
+          matcher: "^Bash$",
+          hooks: [
+            {
+              type: "command",
+              command: "sh \"$(git rev-parse --show-toplevel)/.agents/hooks/check-version-format.sh\"",
+              timeout: 5,
+              statusMessage: "Checking template version before git commit"
+            }
+          ]
+        }
+      ],
+      `${relativePath} should configure the Codex PreToolUse version format validation hook`
     );
     assert.equal(settings.hooks?.PostToolUse, undefined, `${relativePath} should not configure a PostToolUse reminder hook`);
   });

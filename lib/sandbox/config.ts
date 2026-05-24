@@ -8,7 +8,7 @@ import { hostJoin } from './engines/wsl2-paths.ts';
 const DEFAULTS = Object.freeze({
   engine: null,
   runtimes: ['node20'],
-  tools: ['claude-code', 'codex', 'opencode', 'gemini-cli'],
+  tools: ['claude-code', 'codex', 'gemini-cli', 'opencode'],
   dockerfile: null,
   vm: {
     cpu: null,
