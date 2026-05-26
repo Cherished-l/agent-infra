@@ -211,6 +211,7 @@ jobs:
           repository: fitlab-ai/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
+          fetch-depth: 0
 
       - name: Merge bottle block into Formula
         if: steps.outcome.outputs.has_bottles == 'true'
