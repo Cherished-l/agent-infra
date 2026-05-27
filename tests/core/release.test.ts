@@ -88,13 +88,12 @@ test("update-homebrew workflow syncs the tap after a successful release run", ()
   assert.match(workflow, /os: macos-26[\s\S]*platform: arm64_tahoe/);
   assert.match(workflow, /os: macos-15[\s\S]*platform: arm64_sequoia/);
   assert.match(workflow, /os: macos-14[\s\S]*platform: arm64_sonoma/);
-  assert.match(workflow, /os: macos-14-large[\s\S]*platform: sonoma/);
   assert.match(workflow, /brew install --build-bottle --formula --verbose agent-infra/);
   assert.match(workflow, /brew bottle --json --no-rebuild --root-url="\$ROOT_URL" agent-infra/);
   assert.match(workflow, /https:\/\/github\.com\/fitlab-ai\/agent-infra\/releases\/download\/v\$\{VERSION\}/);
   assert.match(workflow, /gh release upload "v\$\{VERSION\}"/);
   assert.match(workflow, /fail-fast: false/);
-  assert.match(workflow, /Expected 4 bottle JSON files but found/);
+  assert.match(workflow, /Expected 3 bottle JSON files but found/);
   assert.match(workflow, /publish-bottle:[\s\S]*needs: \[prepare-formula, bake-bottle\]/);
   assert.match(workflow, /generate-bottle-block\.mjs/);
   assert.match(workflow, /actions\/download-artifact@v7/);
