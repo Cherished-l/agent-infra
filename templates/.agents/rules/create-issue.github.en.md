@@ -149,13 +149,13 @@ gh api "repos/$upstream_repo/issues/{issue-number}" -X PATCH \
 
 Failure is non-blocking.
 
-### 6.5 Set Issue Fields (Optional)
+### 7. Set Issue Fields (Optional)
 
 If `has_push=true`, read `.agents/rules/issue-fields.md` and follow Flow A to write any applicable non-empty `priority`, `effort`, `start_date`, and `target_date` values from `task.md`.
 
 Field write failures are non-blocking.
 
-### 7. Write Back task.md
+### 8. Write Back task.md
 
 Update task.md:
 
@@ -164,7 +164,7 @@ Update task.md:
 
 > Do NOT append an Activity Log entry here. The Issue creation event is already captured by the GitHub Issue itself and by the frontmatter `issue_number` field; the Activity Log only records the single `create-task` skill execution anchor (`Task Created`), written by the caller SKILL step 3.
 
-### 8. Return the Result
+### 9. Return the Result
 
 Hand the following back to the caller `create-task`:
 

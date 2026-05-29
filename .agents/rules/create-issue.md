@@ -149,13 +149,13 @@ gh api "repos/$upstream_repo/issues/{issue-number}" -X PATCH \
 
 设置失败不阻断流程。
 
-### 6.5 设置 Issue 字段（可选）
+### 7. 设置 Issue 字段（可选）
 
 如果 `has_push=true`，读取 `.agents/rules/issue-fields.md`，按流程 A 写入 `task.md` 中适用且非空的 `priority`、`effort`、`start_date` 和 `target_date`。
 
 字段写入失败不阻断流程。
 
-### 7. 回写 task.md
+### 8. 回写 task.md
 
 更新 task.md：
 
@@ -164,7 +164,7 @@ gh api "repos/$upstream_repo/issues/{issue-number}" -X PATCH \
 
 > 不要在此追加 Activity Log 条目。Issue 创建事件已由 GitHub Issue 自身和 frontmatter `issue_number` 承载；Activity Log 仅记录 `create-task` skill 一次执行的整体锚点（`Task Created`），由调用方 SKILL 步骤 3 写入。
 
-### 8. 返回结果
+### 9. 返回结果
 
 把以下信息回传给调用方 `create-task`：
 
