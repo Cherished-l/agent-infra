@@ -54,6 +54,7 @@ git status --short
 <!-- TODO: Add project-specific follow-up tasks such as demo capture, docs publishing, or downstream notifications -->
 
 - Examples: record a terminal demo, refresh a docs site, notify downstream teams, update release dashboards
+- If a task here displays or captures the just-released version (e.g., recording a CLI demo), move it **before** Step 3 — otherwise it will reflect the next development version, not the release
 - If there are no extra tasks, remove this step in the project-specific copy
 
 ### 6. Create the Follow-up Commit
