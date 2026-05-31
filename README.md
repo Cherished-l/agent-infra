@@ -22,7 +22,9 @@
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
 </p>
 
-[中文版](README.zh-CN.md)
+<p align="center">
+  <strong>English</strong> · <a href="./README.zh-CN.md">中文</a>
+</p>
 
 <a id="why-agent-infra"></a>
 
