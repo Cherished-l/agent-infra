@@ -40,6 +40,12 @@
         "assets/",
         "scripts/",
         "tests/core/"
+      ],
+      "meta": [
+        ".agents/",
+        ".github/",
+        "tests/helpers/",
+        "tests/scripts/"
       ]
     }
   },

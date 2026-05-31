@@ -49,7 +49,8 @@ test(".agents/.airc.json declares labels.in mapping for module labels", () => {
   assert.deepEqual(collaborator.labels.in, {
     cli: ["bin/", "lib/", "src/", "tests/cli/"],
     templates: ["templates/", "tests/templates/"],
-    core: ["assets/", "scripts/", "tests/core/"]
+    core: ["assets/", "scripts/", "tests/core/"],
+    meta: [".agents/", ".github/", "tests/helpers/", "tests/scripts/"]
   });
 });
 
