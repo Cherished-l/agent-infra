@@ -28,7 +28,7 @@ function createBuiltinTools(home: string, project: string): Record<string, Sandb
     'claude-code': {
       id: 'claude-code',
       name: 'Claude Code',
-      npmPackage: '@anthropic-ai/claude-code',
+      npmPackage: '@anthropic-ai/claude-code@stable',
       sandboxBase: hostJoin(home, '.agent-infra', 'sandboxes', 'claude-code'),
       containerMount: '/home/devuser/.claude',
       versionCmd: 'claude --version',
