@@ -153,14 +153,15 @@ async function runBridge({
 
   function handleCtrlV(match: CtrlVMatch, target: PtyProcess): void {
     try {
-      if (!adapter.hasImage()) {
-        target.write(match.raw);
-        return;
-      }
-
+      // readImagePng returns null both for "no image on clipboard" and for
+      // unexpected read failures; both cases forward the original Ctrl+V so
+      // the container app handles it as a regular keystroke. The throw branch
+      // below only fires on truly unexpected exceptions (e.g. fs write
+      // errors writing to the host clipboard dir).
       const png = adapter.readImagePng();
       if (!png) {
-        throw new Error('clipboard image could not be read');
+        target.write(match.raw);
+        return;
       }
       const filename = pngClipboardFilename(png);
       writeClipboardPngAtomic(clipboardHostDir(home), filename, png);

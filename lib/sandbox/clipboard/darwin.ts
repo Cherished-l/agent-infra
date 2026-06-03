@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import type { ExecFileSyncOptions } from 'node:child_process';
 
-const HAS_IMAGE_TIMEOUT_MS = 500;
+// Quick "is osascript callable at all" probe used by available(). Not for
+// clipboard work — clipboard work shares READ_IMAGE_TIMEOUT_MS below.
+// Generous 2s budget: this is a once-per-session bridge enablement check;
+// failing it just disables the clipboard bridge for that session, so we'd
+// rather tolerate a cold osascript spawn than misreport "unavailable".
+const OSASCRIPT_PROBE_TIMEOUT_MS = 2_000;
 const READ_IMAGE_TIMEOUT_MS = 5_000;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -12,7 +17,14 @@ type ExecFn = (cmd: string, args: string[], options?: ExecFileSyncOptions) => Bu
 
 export type DarwinClipboardAdapter = {
   available(): { ok: true } | { ok: false; reason: string };
-  hasImage(): boolean;
+  // Returns PNG bytes when the clipboard holds (or can synthesize) an image,
+  // null otherwise. No separate hasImage(): a probing `clipboard info` call
+  // forces NSPasteboard to materialize TIFF/BMP/8BPS representations to
+  // report their sizes, which can take seconds when the clipboard holds a
+  // Retina screenshot. Letting AppleScript's `as «class PNGf»` either succeed
+  // (image present, possibly auto-converted from TIFF/JPEG/GIF) or error
+  // (nothing PNG-coercible) keeps the path O(PNG size) regardless of how
+  // many other representations the source declared.
   readImagePng(): Buffer | null;
 };
 
@@ -30,21 +42,10 @@ export function createDarwinClipboardAdapter({
   return {
     available() {
       try {
-        execFn('osascript', ['-e', 'return "ok"'], { encoding: 'utf8', timeout: HAS_IMAGE_TIMEOUT_MS });
+        execFn('osascript', ['-e', 'return "ok"'], { encoding: 'utf8', timeout: OSASCRIPT_PROBE_TIMEOUT_MS });
         return { ok: true };
       } catch {
         return { ok: false, reason: 'macOS osascript is unavailable' };
-      }
-    },
-    hasImage() {
-      try {
-        const output = String(execFn('osascript', ['-e', 'clipboard info'], {
-          encoding: 'utf8',
-          timeout: HAS_IMAGE_TIMEOUT_MS
-        }));
-        return /\b(PNGf|TIFF|JPEG|GIFf)\b/.test(output);
-      } catch {
-        return false;
       }
     },
     readImagePng() {

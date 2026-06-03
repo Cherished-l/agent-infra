@@ -91,9 +91,6 @@ test("darwin clipboard adapter reads PNG through a temporary file", async () => 
   const adapter = createDarwinClipboardAdapter({
     execFn(cmd, args, options) {
       execCalls.push({ cmd, args, timeout: options?.timeout });
-      if (args[1] === "clipboard info") {
-        return "«class PNGf»";
-      }
       const script = String(args[1]);
       const match = script.match(/POSIX file "([^"]+)"/);
       if (match?.[1]) {
@@ -104,9 +101,15 @@ test("darwin clipboard adapter reads PNG through a temporary file", async () => 
   });
 
   assert.deepEqual(adapter.available(), { ok: true });
-  assert.equal(adapter.hasImage(), true);
   assert.deepEqual(adapter.readImagePng(), png);
   assert.equal(execCalls.every((call) => typeof call.timeout === "number"), true);
+  // readImagePng must not call the slow `clipboard info` probe — it forces
+  // NSPasteboard to materialize every declared representation (TIFF/BMP/...)
+  // for the size enumeration, which can take seconds on large screenshots.
+  assert.equal(
+    execCalls.some((call) => call.args[1] === "clipboard info"),
+    false
+  );
 });
 
 test("darwin clipboard adapter rejects empty or invalid PNG output", async () => {
@@ -166,7 +169,6 @@ test("clipboard bridge falls back when optional node-pty is unavailable", async 
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -208,7 +210,6 @@ test("clipboard bridge falls back when node-pty spawn fails", async () => {
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -266,7 +267,6 @@ test("clipboard bridge injects bracketed paste for image Ctrl+V", async () => {
       stdout: stdout as never,
       adapter: {
         available: () => ({ ok: true }),
-        hasImage: () => true,
         readImagePng: () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
       },
       runOk: () => true,
@@ -294,6 +294,67 @@ test("clipboard bridge injects bracketed paste for image Ctrl+V", async () => {
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test("clipboard bridge silently forwards Ctrl+V when the clipboard holds no image", async () => {
+  const { runInteractiveWithClipboardBridge } = await loadFreshEsm<BridgeModule>("lib/sandbox/clipboard/bridge.js");
+  const stdin = new EventEmitter() as EventEmitter & {
+    isTTY: boolean;
+    setRawMode(value: boolean): void;
+    resume(): void;
+  };
+  const stdout = new EventEmitter() as EventEmitter & {
+    isTTY: boolean;
+    columns: number;
+    rows: number;
+    write(chunk: string): void;
+  };
+  const writes: string[] = [];
+  const stderr: string[] = [];
+  let exitHandler: ((event: { exitCode: number }) => void) | null = null;
+
+  stdin.isTTY = true;
+  stdin.setRawMode = () => {};
+  stdin.resume = () => {};
+  stdout.isTTY = true;
+  stdout.columns = 100;
+  stdout.rows = 30;
+  stdout.write = () => {};
+
+  const promise = runInteractiveWithClipboardBridge({
+    engine: "native",
+    dockerArgs: ["exec", "-it", "demo", "bash"],
+    container: "demo",
+    home: "/tmp/home",
+    platformName: "darwin",
+    stdin: stdin as never,
+    stdout: stdout as never,
+    adapter: {
+      available: () => ({ ok: true }),
+      readImagePng: () => null
+    },
+    runOk: () => true,
+    writeStderr: (chunk) => stderr.push(chunk),
+    loadPty: async () => ({
+      spawn() {
+        return {
+          onData() {},
+          onExit(callback) { exitHandler = callback; },
+          write(data) { writes.push(data); },
+          resize() {},
+          kill() {}
+        };
+      }
+    })
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  stdin.emit("data", Buffer.from("\x1b[27;5;118~", "binary"));
+  exitHandler?.({ exitCode: 0 });
+
+  assert.equal(await promise, 0);
+  assert.deepEqual(writes, ["\x1b[27;5;118~"]);
+  assert.equal(stderr.length, 0);
 });
 
 test("clipboard bridge flushes a standalone ESC after the partial-sequence delay", async () => {
@@ -330,7 +391,6 @@ test("clipboard bridge flushes a standalone ESC after the partial-sequence delay
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -390,7 +450,6 @@ test("clipboard bridge preserves UTF-8 input bytes for normal text", async () =>
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -450,7 +509,6 @@ test("clipboard bridge preserves UTF-8 input split across chunks", async () => {
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -510,7 +568,6 @@ test("clipboard bridge returns signal exit codes before numeric exitCode", async
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -567,7 +624,6 @@ test("clipboard bridge ends and restores terminal when stdin closes before pty o
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
@@ -627,8 +683,10 @@ test("clipboard bridge forwards original Ctrl+V sequence when image handling fai
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => { throw new Error("probe failed"); },
-      readImagePng: () => null
+      // Unexpected error path (not "no image" — that would just return null
+      // and silently forward Ctrl+V). Verifies the catch branch still warns
+      // the user once when the read itself blows up.
+      readImagePng: () => { throw new Error("read failed"); }
     },
     runOk: () => true,
     writeStderr: (chunk) => stderr.push(chunk),
@@ -652,7 +710,7 @@ test("clipboard bridge forwards original Ctrl+V sequence when image handling fai
   assert.equal(await promise, 0);
   assert.deepEqual(writes, ["\x1b[27;5;118~"]);
   assert.equal(stderr.length, 1);
-  assert.match(stderr[0] ?? "", /probe failed/);
+  assert.match(stderr[0] ?? "", /read failed/);
 });
 
 test("clipboard bridge pauses stdin on exit so the host process can exit", async () => {
@@ -691,7 +749,6 @@ test("clipboard bridge pauses stdin on exit so the host process can exit", async
     stdout: stdout as never,
     adapter: {
       available: () => ({ ok: true }),
-      hasImage: () => false,
       readImagePng: () => null
     },
     runOk: () => true,
