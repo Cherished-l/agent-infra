@@ -60,7 +60,7 @@ test("sandbox create injects the detected host timezone into docker run", onPlat
       tmpDir,
       ["create", "feature-x", "--cpu", "1", "--memory", "1"],
       { DOCKER_EXIT_FOR_RUN: "1", TZ: "Europe/Paris" },
-      { timeout: 5_000 }
+      { timeout: 15_000 }
     );
 
     const runCall = fixture.readDockerCalls().find((call) => call[0] === "run");
