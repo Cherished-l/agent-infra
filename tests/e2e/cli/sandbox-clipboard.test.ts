@@ -10,6 +10,7 @@ import { loadFreshEsm } from "../../helpers.ts";
 type KeysModule = typeof import("../../../lib/sandbox/clipboard/keys.ts");
 type PathsModule = typeof import("../../../lib/sandbox/clipboard/paths.ts");
 type DarwinModule = typeof import("../../../lib/sandbox/clipboard/darwin.ts");
+type IndexModule = typeof import("../../../lib/sandbox/clipboard/index.ts");
 type BridgeModule = typeof import("../../../lib/sandbox/clipboard/bridge.ts");
 type PtyExitEvent = { exitCode: number; signal?: number | string };
 type PtyExitHandler = (event: PtyExitEvent) => void;
@@ -139,9 +140,42 @@ test("darwin clipboard adapter rejects empty or invalid PNG output", async () =>
   assert.equal(adapter.readImagePng(), null);
 });
 
-test("clipboard bridge falls back on non-darwin platforms", async () => {
+test("clipboard adapter factory returns the darwin adapter on macOS", async () => {
+  const { createClipboardAdapter } = await loadFreshEsm<IndexModule>("lib/sandbox/clipboard/index.js");
+  const adapter = createClipboardAdapter({ platformName: "darwin" });
+
+  assert.notEqual(adapter, null);
+  assert.equal(typeof adapter?.available, "function");
+  assert.equal(typeof adapter?.readImagePng, "function");
+});
+
+test("clipboard adapter factory disables linux", async () => {
+  const { createClipboardAdapter } = await loadFreshEsm<IndexModule>("lib/sandbox/clipboard/index.js");
+
+  assert.equal(createClipboardAdapter({ platformName: "linux" }), null);
+});
+
+test("clipboard adapter factory disables win32", async () => {
+  const { createClipboardAdapter } = await loadFreshEsm<IndexModule>("lib/sandbox/clipboard/index.js");
+
+  assert.equal(createClipboardAdapter({ platformName: "win32" }), null);
+});
+
+test("clipboard adapter factory disables unknown platforms", async () => {
+  const { createClipboardAdapter } = await loadFreshEsm<IndexModule>("lib/sandbox/clipboard/index.js");
+
+  assert.equal(createClipboardAdapter({ platformName: "sunos" as NodeJS.Platform }), null);
+});
+
+test("clipboard bridge falls back with adapter-null warning on linux TTYs", async () => {
   const { runInteractiveWithClipboardBridge } = await loadFreshEsm<BridgeModule>("lib/sandbox/clipboard/bridge.js");
+  const stdin = new EventEmitter() as EventEmitter & { isTTY: boolean };
+  const stdout = new EventEmitter() as EventEmitter & { isTTY: boolean };
   const calls: string[][] = [];
+  const stderr: string[] = [];
+
+  stdin.isTTY = true;
+  stdout.isTTY = true;
 
   const exitCode = await runInteractiveWithClipboardBridge({
     engine: "native",
@@ -149,14 +183,48 @@ test("clipboard bridge falls back on non-darwin platforms", async () => {
     container: "demo",
     home: "/tmp/home",
     platformName: "linux",
+    stdin: stdin as never,
+    stdout: stdout as never,
     runInteractive(_engine, cmd, args) {
       calls.push([cmd, ...args]);
       return 7;
-    }
+    },
+    writeStderr: (chunk) => stderr.push(chunk)
   });
 
   assert.equal(exitCode, 7);
   assert.deepEqual(calls, [["docker", "exec", "-it", "demo", "bash"]]);
+  assert.match(stderr.join(""), /clipboard image paste bridge disabled: no clipboard adapter available on this platform/);
+});
+
+test("clipboard bridge falls back with TTY warning before adapter lookup", async () => {
+  const { runInteractiveWithClipboardBridge } = await loadFreshEsm<BridgeModule>("lib/sandbox/clipboard/bridge.js");
+  const stdin = new EventEmitter() as EventEmitter & { isTTY: boolean };
+  const stdout = new EventEmitter() as EventEmitter & { isTTY: boolean };
+  const calls: string[][] = [];
+  const stderr: string[] = [];
+
+  stdin.isTTY = false;
+  stdout.isTTY = true;
+
+  const exitCode = await runInteractiveWithClipboardBridge({
+    engine: "native",
+    dockerArgs: ["exec", "-it", "demo", "bash"],
+    container: "demo",
+    home: "/tmp/home",
+    platformName: "linux",
+    stdin: stdin as never,
+    stdout: stdout as never,
+    runInteractive(_engine, cmd, args) {
+      calls.push([cmd, ...args]);
+      return 7;
+    },
+    writeStderr: (chunk) => stderr.push(chunk)
+  });
+
+  assert.equal(exitCode, 7);
+  assert.deepEqual(calls, [["docker", "exec", "-it", "demo", "bash"]]);
+  assert.match(stderr.join(""), /clipboard image paste bridge disabled: host stdin\/stdout is not a TTY/);
 });
 
 test("clipboard bridge falls back when optional node-pty is unavailable", async () => {
