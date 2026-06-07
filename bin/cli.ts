@@ -13,12 +13,13 @@ if (major < 22) {
 const USAGE = `agent-infra ${VERSION} - bootstrap AI collaboration infrastructure
 
 Usage:
-  agent-infra init        Initialize a new project with update-agent-infra seed command
-  agent-infra merge       Merge tasks from another workspace directory (active/blocked/completed/archive)
-  agent-infra update      Update seed files and sync file registry for an existing project
-  agent-infra sandbox     Manage Docker-based AI sandboxes
-  agent-infra version     Show version
-  agent-infra help        Show this help message
+  agent-infra cp <ssh-alias>  Copy local clipboard image to a remote macOS NSPasteboard
+  agent-infra help            Show this help message
+  agent-infra init            Initialize a new project with update-agent-infra seed command
+  agent-infra merge           Merge tasks from another workspace directory (active/blocked/completed/archive)
+  agent-infra sandbox         Manage Docker-based AI sandboxes
+  agent-infra update          Update seed files and sync file registry for an existing project
+  agent-infra version         Show version
 
 Shorthand: ai (e.g. ai init)
 
@@ -94,6 +95,17 @@ switch (command) {
       process.stderr.write(`Error: ${errorMessage(e)}\n`);
       process.exitCode = 1;
     });
+    break;
+  }
+  case 'cp': {
+    const imported = await importCommand('../lib/cp.ts');
+    if (!imported) break;
+    const { cmdCp } = imported;
+    const code = await cmdCp(process.argv.slice(3)).catch((e: unknown) => {
+      process.stderr.write(`Error: ${errorMessage(e)}\n`);
+      return 1;
+    });
+    if (code) process.exitCode = code;
     break;
   }
   case 'version': {
