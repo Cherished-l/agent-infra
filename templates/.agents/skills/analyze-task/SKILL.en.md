@@ -115,6 +115,18 @@ Create `.agents/workspace/active/{task-id}/{analysis-artifact}`.
 ## Dependencies
 - {Required dependencies and coordination with other modules}
 
+## Assumptions
+
+> If this analysis depends on assumptions, list them here; omit this section if there are none.
+
+- {assumption}
+
+## Open Questions
+
+> If there are unresolved questions for human review, list them here; omit this section if there are none.
+
+- {open question}
+
 ## Effort and Complexity Assessment
 - Complexity: {High/Medium/Low}
 - Risk level: {High/Medium/Low}

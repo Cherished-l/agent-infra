@@ -1,0 +1,57 @@
+# General Rule - No Mid-Flow Questions During SKILL Execution
+
+> **Scope**: this rule applies to **all SKILL** executions.
+> Only the two exemption categories below may ask the user; any other mid-flow question is a violation.
+
+## Exemption Categories
+
+### Exemption 1: Literal clarification of entry-point natural-language input
+
+Allowed only when the SKILL's core responsibility is to process **natural-language input the user provided in this invocation**, and that input is unparseable or self-contradictory. The clarification must be about the **literal input itself**; it must not be used to solicit implementation preferences.
+
+SKILLs currently covered by this exemption:
+
+- `create-task`: may clarify the task description itself when the user-provided description is unclear
+- `refine-title`: requires the user's final confirmation (y/n) for a generated title
+
+### Exemption 2: Short confirmation before truly irreversible destructive operations
+
+Any SKILL may pause briefly before the following irreversible operations; routine design choices do not qualify:
+
+- `git push --force`, `rm -rf` against the user's worktree, etc.
+- Deleting or overwriting shared remote resources (e.g., shared GitHub labels)
+- Overwriting uncommitted local changes
+
+SKILLs currently covered by this exemption:
+
+- `init-labels`: may confirm before deleting legacy labels not in the final mapping
+- `commit`: may stop and confirm when its plan conflicts with the user's uncommitted changes
+
+## No-Mid-Flow-Questions Clause (default behavior)
+
+For every SKILL execution context not covered by the two exemptions above, the default behavior is:
+
+1. Do not call any user-question tool, including but not limited to `AskUserQuestion` and equivalent mechanisms that ask the user to choose.
+2. When uncertain, proceed with the most robust option without interrupting the flow. Use this priority order:
+   1. Prefer the option consistent with existing code, documentation, and rules
+   2. Prefer the more reversible option
+   3. Prefer the option with the smaller impact area
+3. If assumptions or open questions exist, write them into fixed artifact sections instead of leaving them suspended in the conversation:
+   - English artifacts use `## Assumptions` / `## Open Questions`; Chinese artifacts use `## 假设` / `## 未决问题`
+   - Meaning: the assumptions section records assumptions used for this run that may be revisited later; the open questions section records unresolved questions for human review
+   - If the artifact template does not reserve these sections, append them as needed. If there are no assumptions or open questions, do not force empty sections.
+
+## Human Review Checkpoint Semantics
+
+A mandatory human review checkpoint means:
+
+- Stop after producing the artifact: once the skill finishes an artifact such as `plan.md`, end the current invocation and wait for the user to explicitly trigger the next skill command
+- Do not pause mid-process to ask for input: do not insert interruptions such as "Do you prefer option A or B?" between execution steps
+
+If a key decision needs human judgment during execution, follow the assumptions and open questions rule above: record it in the artifact's "Open Questions" / `未决问题` section for the user to address at the review checkpoint.
+
+## Anchor Location
+
+This rule's sole global anchor lives in the project-level AGENTS.md "AI Behavior Principles" preamble, which every AI tool loads. Individual SKILL.md files no longer reference this rule, so no per-skill duplicate bullet needs to be maintained.
+
+When executing any SKILL, if AGENTS.md's preamble notes "follow this rule first," the LLM should **proactively Read** this file to load the complete exemption list and concrete constraints.
