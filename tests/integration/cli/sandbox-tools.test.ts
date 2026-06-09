@@ -207,6 +207,81 @@ function spawnSandboxCli(
   });
 }
 
+test("sandbox exec '#abc' fails branch validation without triggering docker IO", onPlatforms("linux", "darwin", "win32"), () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-sandbox-enter-bad-shortref-"));
+
+  try {
+    const fixture = writeSandboxEngineFixture(tmpDir, { project: "demo" });
+
+    const result = spawnSync(
+      process.execPath,
+      cliArgs("sandbox", "exec", "#abc"),
+      {
+        cwd: fixture.repoDir,
+        env: {
+          ...envWithPrependedPath(gitSafeEnv(), fixture.binDir),
+          HOME: tmpDir,
+          USERPROFILE: tmpDir,
+          DOCKER_LOG_PATH: fixture.logPath
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000
+      }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(String(result.stderr), /Invalid branch name '#abc'/);
+    assert.deepEqual(fixture.readDockerCalls(), []);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("sandbox exec '#1' triggers fetchSandboxRows and reports no-running-sandbox", onPlatforms("linux", "darwin", "win32"), () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-sandbox-enter-shortref-"));
+
+  try {
+    const fixture = writeSandboxEngineFixture(tmpDir, { project: "demo" });
+
+    const result = spawnSync(
+      process.execPath,
+      cliArgs("sandbox", "exec", "#1"),
+      {
+        cwd: fixture.repoDir,
+        env: {
+          ...envWithPrependedPath(gitSafeEnv(), fixture.binDir),
+          HOME: tmpDir,
+          USERPROFILE: tmpDir,
+          DOCKER_LOG_PATH: fixture.logPath
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000
+      }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(String(result.stderr), /No running sandbox to reference with '#1'/);
+
+    const dockerCalls = fixture.readDockerCalls();
+    assert.equal(dockerCalls.length, 1);
+    // Only assert the stable prefix: '--format' value contains literal tabs
+    // which a Windows .cmd shim retokenizes into separate args before the
+    // shim's node script sees them. The format string itself is covered by
+    // the containerListFormat() unit test.
+    assert.deepEqual(dockerCalls[0]!.slice(0, 5), [
+      "ps",
+      "-a",
+      "--filter",
+      "label=demo.sandbox",
+      "--format"
+    ]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("sandbox exec enters tmux automatically for interactive shells", onPlatforms("linux", "darwin", "win32"), () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-sandbox-enter-"));
 
