@@ -80,14 +80,19 @@ Sleep 1s
 
 # Prompt 5: Platform type — accept default (github)
 Enter
+Wait+Screen /Pull Request flow/
+Sleep 1s
+
+# Prompt 6: Require Pull Request flow — accept default (yes)
+Enter
 Wait+Screen /Template sources/
 Sleep 1s
 
-# Prompt 6: Template sources — skip (Enter)
+# Prompt 7: Template sources — skip (Enter)
 Enter
 Sleep 1s
 
-# Prompt 7: Skill sources — skip (Enter)
+# Prompt 8: Skill sources — skip (Enter)
 Enter
 Sleep 5s
 
