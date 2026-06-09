@@ -258,6 +258,83 @@ Namespaced custom TUI:
 
 `customTUIs` should contain one entry per custom TUI. To let `update-agent-infra` generate command files for custom skills, keep at least one existing command file in `dir` that references a built-in skill path such as `.agents/skills/analyze-task/SKILL.md`; agent-infra uses that file as the format reference.
 
+## Sandbox Custom Tools
+
+`customTUIs` (above) generates slash-command files but does not change the sandbox image. To install a non-npm TUI (pip / cargo / curl-based / pre-built binary) into the sandbox image and live-mount its credentials, declare it under `sandbox.customTools` in `.agents/.airc.json`. Built-in tools (`claude-code`, `codex`, `opencode`, `gemini-cli`) keep working unchanged.
+
+### Required fields
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Lowercase id matching `^[a-z0-9][a-z0-9-]*$`. Referenced from `sandbox.tools`. Must not collide with a built-in id. |
+| `install` | Install descriptor. `{ "type": "npm", "cmd": "<npm package spec>" }` runs `npm install -g <cmd>`. `{ "type": "shell", "cmd": "<shell>" }` runs the shell command(s) as `devuser` during image build. `cmd` must be non-empty. |
+
+Minimal entry — the contract for getting a tool into the image is just these two fields:
+
+```json
+{
+  "sandbox": {
+    "tools": ["my-shell-tool"],
+    "customTools": [
+      {
+        "id": "my-shell-tool",
+        "install": { "type": "shell", "cmd": "curl -fsSL https://example.com/install.sh | bash" }
+      }
+    ]
+  }
+}
+```
+
+### Optional integration fields
+
+Add only the fields your tool actually needs. Omit them and the loader fills sensible defaults; provide them and the loader uses your value. Provide an explicit empty string and the loader rejects it (preventing silent install-verification bypass).
+
+| Field | Default when omitted | When to provide |
+|-------|---------------------|-----------------|
+| `name` | `id` | A friendlier display name in sandbox reports / hints. |
+| `containerMount` | `/home/devuser/.<id>` | Your tool stores its config / state somewhere other than `~/.<id>`. Must be an absolute path. |
+| `versionCmd` | `which <id>` | The installed binary name differs from `id` (e.g. id `anthropic-claude`, binary `claude`); set `"claude --version"` so sandbox-create can verify the install. |
+| `setupHint` | `Run \`<id>\` inside the container to set up.` | The setup story is non-obvious and worth a one-liner. |
+| `envVars` | (none) | Your tool reads config from a path the env points to (e.g. `XDG_CONFIG_HOME`-style or a custom `*_CONFIG` env). Shape: `Record<string, string>`. |
+| `hostPreSeedFiles` / `hostPreSeedDirs` | (none) | Seed the tool's sandbox dir from host files / directories on first launch. |
+| `pathRewriteFiles` | (none) | Seeded files contain absolute host paths that need rewriting to container paths. |
+| `hostLiveMounts` | (none) | Share host credentials live (e.g. OAuth tokens) with the container. Read-write. |
+| `postSetupCmds` | (none) | Run commands inside the container after first setup (e.g. symlinks). |
+
+> **`sandboxBase` is not user-configurable.** The loader always assigns `~/.agent-infra/sandboxes/<id>` so `ai sandbox rm` / `prune` can find tool state. Any `sandboxBase` value in `customTools` entries is silently ignored.
+
+Real-world example — `anthropic-claude` as a user-defined id with binary name `claude` and host credential live-mount:
+
+```json
+{
+  "sandbox": {
+    "tools": ["claude-code", "anthropic-claude"],
+    "customTools": [
+      {
+        "id": "anthropic-claude",
+        "install": { "type": "npm", "cmd": "@anthropic-ai/claude-code@stable" },
+        "versionCmd": "claude --version",
+        "hostLiveMounts": [
+          { "hostPath": "~/.claude/.credentials.json", "containerSubpath": ".credentials.json" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Trust boundary and execution context
+
+- `install.cmd` runs as user `devuser` (non-root) during `docker build`. It can write to the container's filesystem but cannot escape to the host. The trust model is the same as for the `sandbox.dockerfile` escape hatch — you own the `.airc.json` in your repo, so you own what runs at build time.
+- Because the build runs as `devuser`, shell installs cannot `sudo` / `apt-get`. Available options for non-npm distributions:
+  - User-scope installers landing in `~/.local/bin`, `~/.cargo/bin`, `~/.npm-global/bin` (e.g. `pipx`, `cargo install`, `curl … | bash` with `INSTALL_DIR=$HOME/.local/bin`).
+  - When you genuinely need root or system packages, fall back to the existing `sandbox.dockerfile` field and own the full Dockerfile.
+- Changing `install.cmd` (or any field that participates in the image signature) triggers exactly one image rebuild on the next `ai sandbox` invocation.
+
+### Interaction with `sandbox.dockerfile`
+
+When you set `sandbox.dockerfile` to point at your own Dockerfile, agent-infra still passes both `AI_TOOL_PACKAGES` (space-separated npm package specs) and `AI_TOOLS_SHELL_INSTALL_B64` (base64-encoded shell install script) as `--build-arg`. Your custom Dockerfile decides whether to consume them; if it does not declare the matching `ARG`, the shell installs for `customTools` are silently skipped — taking over the Dockerfile means taking over the install path.
+
 ## Skill Authoring Conventions
 
 When writing or updating `.agents/skills/*/SKILL.md` files and their templates, keep step numbering consistent:

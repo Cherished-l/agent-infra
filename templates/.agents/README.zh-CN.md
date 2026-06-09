@@ -258,6 +258,83 @@ args: "<task-id>"   # 可选
 
 `customTUIs` 每个条目对应一个自定义 TUI。若希望 `update-agent-infra` 为自定义 skill 生成命令文件，请在 `dir` 中保留至少一个引用内置 skill 路径的既有命令文件，例如 `.agents/skills/analyze-task/SKILL.md`；agent-infra 会以该文件作为格式参考。
 
+## 沙箱自定义工具（Sandbox Custom Tools）
+
+上文 `customTUIs` 只负责生成 slash-command 文件，**不影响沙箱镜像**。如果要把一个非 npm 分发的 TUI（pip / cargo / curl 脚本 / 裸二进制）装进沙箱镜像、并 live-mount 它的凭证目录，需要在 `.agents/.airc.json` 的 `sandbox.customTools` 中声明。内建的四个工具（`claude-code` / `codex` / `opencode` / `gemini-cli`）行为保持不变。
+
+### 必填字段
+
+| 字段 | 含义 |
+|------|------|
+| `id` | 小写 id，匹配 `^[a-z0-9][a-z0-9-]*$`；由 `sandbox.tools` 引用；不可与内建 id 冲突。 |
+| `install` | 安装描述符。`{ "type": "npm", "cmd": "<npm 包规范>" }` 执行 `npm install -g <cmd>`；`{ "type": "shell", "cmd": "<shell>" }` 在镜像构建阶段以 `devuser` 执行 shell。`cmd` 必须非空。 |
+
+最小入口——把一个工具装进镜像所需的契约只有这两个字段：
+
+```json
+{
+  "sandbox": {
+    "tools": ["my-shell-tool"],
+    "customTools": [
+      {
+        "id": "my-shell-tool",
+        "install": { "type": "shell", "cmd": "curl -fsSL https://example.com/install.sh | bash" }
+      }
+    ]
+  }
+}
+```
+
+### 可选集成字段
+
+只在你的工具真正需要时才加。**省略**则 loader 用合理默认值；**显式提供**则用你给的值；**显式给空串**会被拒绝（防止安装验证被绕过）。
+
+| 字段 | 省略时的默认值 | 什么时候应该提供 |
+|------|---------------|----------------|
+| `name` | `id` | 想在沙箱报告 / 提示里显示更友好的名称。 |
+| `containerMount` | `/home/devuser/.<id>` | 工具的配置 / 状态目录不在 `~/.<id>` 而在别处。必须是绝对路径。 |
+| `versionCmd` | `which <id>` | 安装后的可执行文件名与 `id` 不同（例如 id 是 `anthropic-claude`，二进制名是 `claude`）；填 `"claude --version"` 让 sandbox-create 能验证安装。 |
+| `setupHint` | `Run \`<id>\` inside the container to set up.` | setup 流程不一目了然，值得用一行说明。 |
+| `envVars` | （无） | 工具通过环境变量找配置（如 `XDG_CONFIG_HOME` 风格或自定义 `*_CONFIG` 变量）。形状：`Record<string, string>`。 |
+| `hostPreSeedFiles` / `hostPreSeedDirs` | （无） | 首次启动时从宿主复制文件 / 目录到工具沙箱配置目录。 |
+| `pathRewriteFiles` | （无） | seed 进来的文件里有宿主绝对路径，需要改写为容器路径。 |
+| `hostLiveMounts` | （无） | 把宿主凭证（如 OAuth token）实时挂进容器，读写共享。 |
+| `postSetupCmds` | （无） | 首次安装完成后在容器内执行命令（如建符号链接）。 |
+
+> **`sandboxBase` 不由用户配置。** loader 永远使用 `~/.agent-infra/sandboxes/<id>`，这样 `ai sandbox rm` / `prune` 才能找到工具状态目录。`customTools` 条目里写的任何 `sandboxBase` 都会被静默忽略。
+
+实际场景示例——`anthropic-claude` 作为用户自定义 id，二进制名是 `claude`，并把宿主凭证 live-mount 进来：
+
+```json
+{
+  "sandbox": {
+    "tools": ["claude-code", "anthropic-claude"],
+    "customTools": [
+      {
+        "id": "anthropic-claude",
+        "install": { "type": "npm", "cmd": "@anthropic-ai/claude-code@stable" },
+        "versionCmd": "claude --version",
+        "hostLiveMounts": [
+          { "hostPath": "~/.claude/.credentials.json", "containerSubpath": ".credentials.json" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 信任边界与执行身份
+
+- `install.cmd` 在 `docker build` 阶段以 `devuser`（非 root）身份执行，只能写容器内文件系统，不能逃逸到宿主。信任模型与现有 `sandbox.dockerfile` 一致：你是 `.airc.json` 的作者，本次构建做什么由你负责。
+- 因为不是 root，shell 安装无法 `sudo` / `apt-get`。非 npm 分发的几条可用路径：
+  - 用户态安装器，落到 `~/.local/bin`、`~/.cargo/bin`、`~/.npm-global/bin`（如 `pipx`、`cargo install`、`curl … | bash` 配合 `INSTALL_DIR=$HOME/.local/bin`）。
+  - 确实需要 root / 系统包时，仍走原有 `sandbox.dockerfile` 字段，接管整个 Dockerfile。
+- 修改 `install.cmd` 或任何参与镜像签名的字段，下次 `ai sandbox` 命令会触发一次镜像重建。
+
+### 与 `sandbox.dockerfile` 的交互
+
+当 `sandbox.dockerfile` 指向自定义 Dockerfile 时，agent-infra 仍会把 `AI_TOOL_PACKAGES`（空格分隔的 npm 包规范）和 `AI_TOOLS_SHELL_INSTALL_B64`（base64 编码的 shell 安装脚本）作为 `--build-arg` 传入。你的自定义 Dockerfile 若未声明对应 `ARG`，shell 安装路径会被 docker build 静默忽略——这是接管 Dockerfile 后的应有代价。
+
 ## Skill 编写规范
 
 编写或维护 `.agents/skills/*/SKILL.md` 及其模板时，步骤编号遵循以下规则：
