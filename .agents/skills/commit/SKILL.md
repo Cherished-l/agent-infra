@@ -17,6 +17,10 @@ description: "提交当前变更到 Git"
 | 「`git add -A` 更省事」 | 禁止 `git add -A`/`git add .`；只暂存明确列出的文件，避免带入无关改动。 |
 | 「改了带版权头的文件，年份先不动」 | 改了就更新版权年份（动态取 `date +%Y`），这是提交前的硬性检查。 |
 
+## 任务入参短号别名
+
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
 ## 1. 检查本地修改（关键）
 
 在任何编辑前先检查：

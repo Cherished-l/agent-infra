@@ -7,6 +7,10 @@ description: "关闭 Dependabot 安全告警并记录理由"
 
 关闭指定的 Dependabot 安全告警并记录合理的关闭理由。
 
+## 任务入参短号别名
+
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
 ## 执行流程
 
 ### 1. 获取告警信息
@@ -89,6 +93,11 @@ date "+%Y-%m-%d %H:%M:%S%:z"
   - {YYYY-MM-DD HH:mm:ss±HH:MM} — **Alert Closed** by {agent} — Dependabot alert #{alert-number} dismissed: {reason}
   ```
 - 归档任务
+- **释放短号**（归档目录已 mv 成功，再 release；脚本幂等）：
+
+  ```bash
+  node .agents/scripts/task-short-id.js release "$task_id" || true
+  ```
 
 ### 8. 告知用户
 
@@ -125,3 +134,5 @@ date "+%Y-%m-%d %H:%M:%S%:z"
 - 已关闭：提示 "Alert #{number} is already {state}"
 - 权限错误：提示 "No permission to modify alerts"
 - 用户取消：提示 "Cancellation acknowledged"
+
+

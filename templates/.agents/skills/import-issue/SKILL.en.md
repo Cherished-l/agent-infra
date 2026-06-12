@@ -13,6 +13,10 @@ Import the specified Issue and create a task. Argument: issue number.
 - Do not write or modify business code; import only
 - After executing this skill, you **must** immediately update task status
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Execution Flow
 
 ### 1. Retrieve Issue Information
@@ -119,6 +123,14 @@ If task.md contains a valid `issue_number`, perform these sync actions (skip and
 
 ### 7. Verification Gate
 
+**Allocate short id first** (writes `short_id` back to task.md and the registry entry; the validation gate will read it):
+
+```bash
+node .agents/scripts/task-short-id.js alloc "$task_id"
+```
+
+If this fails (non-zero exit), follow the message — archive some active tasks or raise `task.shortIdLength` — and do NOT continue.
+
 Run the verification gate to confirm the task artifact and sync state are valid:
 
 ```bash
@@ -154,6 +166,8 @@ Next step - run requirements analysis:
   - Gemini CLI: /{{project}}:analyze-task {task-id}
   - Codex CLI: $analyze-task {task-id}
 ```
+
+
 
 ## Completion Checklist
 

@@ -19,6 +19,10 @@ description: "Mark a task as blocked and record the reason"
 
 Version stamp rule: when creating or updating `task.md` frontmatter, read `.agents/rules/version-stamp.md` first and write or refresh `agent_infra_version`.
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Verify Task Exists
@@ -79,6 +83,12 @@ If a valid `issue_number` exists, set `status: blocked` by following issue-sync.
 
 ### 7. Verification Gate
 
+**Release short id** (after the directory has already been moved; the script is idempotent and returns 0 even if the task isn't registered):
+
+```bash
+node .agents/scripts/task-short-id.js release "$task_id" || true
+```
+
 Run the verification gate to confirm the task artifact and sync state are valid:
 
 ```bash
@@ -115,6 +125,8 @@ Next step - check task status after unblocking:
   - Gemini CLI: /{{project}}:check-task {task-id}
   - Codex CLI: $check-task {task-id}
 ```
+
+
 
 ## Completion Checklist
 

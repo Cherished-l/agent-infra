@@ -16,6 +16,10 @@ Restore local task workspace files from platform Issue comments that contain syn
 
 Version stamp rule: when creating or updating `task.md` frontmatter, read `.agents/rules/version-stamp.md` first and write or refresh `agent_infra_version`.
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Verify Input and Environment
@@ -90,9 +94,17 @@ Update the restored `task.md`:
 
 Append an Activity Log entry indicating the task was restored from the platform Issue.
 
+**Re-allocate short id** (the task directory is back under `active/`; alloc a new `#N`, which may differ from the pre-archival value):
+
+```bash
+node .agents/scripts/task-short-id.js alloc "$task_id"
+```
+
 ### 7. Inform User
 
 Report the restored task id, restored file count, and the active task directory.
+
+
 
 ## Completion Checklist
 

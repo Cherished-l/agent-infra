@@ -10,6 +10,10 @@ description: "Check a task's current status and progress"
 - This skill is **read-only** -- do not modify any files
 - Always check the active, blocked, and completed directories
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Locate Task

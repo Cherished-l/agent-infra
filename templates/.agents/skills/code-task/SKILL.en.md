@@ -29,6 +29,10 @@ ls -la .agents/workspace/active/{task-id}/
 tail .agents/workspace/active/{task-id}/task.md
 ```
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Verify Prerequisites

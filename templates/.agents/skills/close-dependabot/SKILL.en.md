@@ -7,6 +7,10 @@ description: "Close a Dependabot alert with a documented reason"
 
 Dismiss the specified Dependabot security alert and record a justified reason.
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Execution Flow
 
 ### 1. Retrieve Alert Information
@@ -89,6 +93,11 @@ date "+%Y-%m-%d %H:%M:%S%:z"
   - {YYYY-MM-DD HH:mm:ss±HH:MM} — **Alert Closed** by {agent} — Dependabot alert #{alert-number} dismissed: {reason}
   ```
 - Archive the task
+- **Release short id** (after the archive `mv` succeeded; the script is idempotent):
+
+  ```bash
+  node .agents/scripts/task-short-id.js release "$task_id" || true
+  ```
 
 ### 8. Inform User
 
@@ -125,3 +134,5 @@ Next step - complete and archive the task if a related task exists:
 - Already closed: output "Alert #{number} is already {state}"
 - Permission error: output "No permission to modify alerts"
 - User canceled: output "Cancellation acknowledged"
+
+

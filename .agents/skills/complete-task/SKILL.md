@@ -26,8 +26,11 @@ tail .agents/workspace/active/{task-id}/task.md
 
 状态核对完成前，禁止任何关于外部状态的断言（例如“代码没变”“测试已通过”“没有其他引用”），包括思考阶段。本门禁只提供结构下限；逐条证据配对和真实性仍需按报告模板与审查要求核对。
 
-## 执行步骤
+## 任务入参短号别名
 
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
+## 执行步骤
 ### 1. 验证任务存在
 
 检查任务是否存在于 `.agents/workspace/active/{task-id}/`。
@@ -119,6 +122,12 @@ ls .agents/workspace/completed/{task-id}/task.md
 
 ### 7. 完成校验
 
+**释放短号**（先 `mv` 目录已成功，再 release；脚本幂等，未在注册表也返回 0）：
+
+```bash
+node .agents/scripts/task-short-id.js release "$task_id" || true
+```
+
 运行完成校验，确认任务产物和同步状态符合规范：
 
 ```bash
@@ -148,6 +157,8 @@ node .agents/scripts/validate-artifact.js gate complete-task .agents/workspace/c
 交付物：
 - {关键产出列表：修改的文件、添加的测试等}
 ```
+
+
 
 ## 完成检查清单
 

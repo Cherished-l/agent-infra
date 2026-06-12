@@ -26,6 +26,10 @@ tail .agents/workspace/active/{task-id}/task.md
 
 Before the state check is complete, do not make external-state assertions such as "the code is unchanged", "tests passed", or "there are no other references", including in reasoning. This gate is only a structural floor; evidence pairing and authenticity still require the report template and review discipline.
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Verify Task Exists
@@ -119,6 +123,12 @@ If a valid `issue_number` exists:
 
 ### 7. Verification Gate
 
+**Release short id** (after the directory has already been moved; the script is idempotent and returns 0 even if the task isn't registered):
+
+```bash
+node .agents/scripts/task-short-id.js release "$task_id" || true
+```
+
 Run the verification gate to confirm the task artifact and sync state are valid:
 
 ```bash
@@ -148,6 +158,8 @@ Task info:
 Deliverables:
 - {List of key outputs: files modified, tests added, etc.}
 ```
+
+
 
 ## Completion Checklist
 

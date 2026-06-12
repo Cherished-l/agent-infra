@@ -22,6 +22,10 @@ After executing this skill, you **must** immediately update task status in task.
 
 Version stamp rule: when creating or updating `task.md` frontmatter, read `.agents/rules/version-stamp.md` first and write or refresh `agent_infra_version`.
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## Steps
 
 ### 1. Parse the User Description
@@ -126,6 +130,14 @@ Handle the result:
 
 ### 5. Verification Gate
 
+**Allocate short id first** (writes `short_id` back to task.md and the registry entry; the validation gate will read it):
+
+```bash
+node .agents/scripts/task-short-id.js alloc "$task_id"
+```
+
+If this fails (non-zero exit), follow the message — archive some active tasks or raise `task.shortIdLength` — and do NOT continue.
+
 Run the verification gate to confirm the task artifact and sync state are valid:
 
 ```bash
@@ -209,6 +221,8 @@ Next step - run requirements analysis:
 
 For later platform sync: after fixing auth / network / template issues, manually run the Issue creation flow in `.agents/rules/create-issue.md` for this task; or manually create/find an Issue and write `issue_number` into task.md so later skills can take over cascade sync.
 ```
+
+
 
 ## Completion Checklist
 

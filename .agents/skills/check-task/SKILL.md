@@ -10,8 +10,11 @@ description: "查看任务的当前状态和进度"
 - 本技能是**只读**操作 —— 不修改任何文件
 - 始终检查 active、blocked 和 completed 目录
 
-## 执行步骤
+## 任务入参短号别名
 
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
+## 执行步骤
 ### 1. 查找任务
 
 按以下优先顺序搜索任务：

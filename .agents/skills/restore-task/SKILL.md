@@ -16,8 +16,11 @@ description: "从平台 Issue 评论还原本地任务文件"
 
 版本戳规则：创建或更新 `task.md` frontmatter 时，先读取 `.agents/rules/version-stamp.md`，并写入或刷新 `agent_infra_version`。
 
-## 执行步骤
+## 任务入参短号别名
 
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
+## 执行步骤
 ### 1. 验证输入与环境
 
 检查：
@@ -90,9 +93,17 @@ date "+%Y-%m-%d %H:%M:%S%:z"
 
 追加 Activity Log，说明任务已从平台 Issue 还原。
 
+**重新分配短号**（已把任务目录写回 `active/`，需要在锁内重新 alloc；新短号可能与归档前不同）：
+
+```bash
+node .agents/scripts/task-short-id.js alloc "$task_id"
+```
+
 ### 7. 告知用户
 
 报告已恢复的 task id、恢复文件数量和 active task 目录。
+
+
 
 ## 完成检查清单
 

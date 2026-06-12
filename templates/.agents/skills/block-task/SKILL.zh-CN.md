@@ -19,8 +19,11 @@ description: "标记任务为阻塞状态并记录原因"
 
 版本戳规则：创建或更新 `task.md` frontmatter 时，先读取 `.agents/rules/version-stamp.md`，并写入或刷新 `agent_infra_version`。
 
-## 执行步骤
+## 任务入参短号别名
 
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
+## 执行步骤
 ### 1. 验证任务存在
 
 检查任务是否存在于 `.agents/workspace/active/{task-id}/`。
@@ -79,6 +82,12 @@ ls .agents/workspace/blocked/{task-id}/task.md
 
 ### 7. 完成校验
 
+**释放短号**（先 `mv` 目录已成功，再 release；脚本幂等，未在注册表也返回 0）：
+
+```bash
+node .agents/scripts/task-short-id.js release "$task_id" || true
+```
+
 运行完成校验，确认任务产物和同步状态符合规范：
 
 ```bash
@@ -115,6 +124,8 @@ node .agents/scripts/validate-artifact.js gate block-task .agents/workspace/bloc
   - Gemini CLI：/agent-infra:check-task {task-id}
   - Codex CLI：$check-task {task-id}
 ```
+
+
 
 ## 完成检查清单
 

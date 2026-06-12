@@ -13,6 +13,10 @@ description: "导入 Dependabot 安全告警并创建修复任务"
 - 不要自动提交。绝不自动执行 `git commit` 或 `git add`
 - 执行本技能后，你**必须**立即更新 task.md 中的任务状态
 
+## 任务入参短号别名
+
+> 如果 `{task-id}` 入参以 `#` 开头，先读取 `.agents/rules/task-short-id.md` 的「SKILL 入参解析」段执行解析；后续命令视 `{task-id}` 为解析后的全长 `TASK-YYYYMMDD-HHMMSS` 形式。
+
 ## 执行流程
 
 ### 1. 获取告警信息
@@ -59,6 +63,14 @@ date "+%Y-%m-%d %H:%M:%S%:z"
 
 ### 4. 完成校验
 
+**先调用短号分配**（保证 `short_id` 写回 task.md + 注册表 entry 已在；完成校验阶段会读取）：
+
+```bash
+node .agents/scripts/task-short-id.js alloc "$task_id"
+```
+
+如失败（退出码非 0），按提示「归档若干任务」或「调高 task.shortIdLength」处理；不要继续执行后续步骤。
+
 运行完成校验，确认任务产物和同步状态符合规范：
 
 ```bash
@@ -97,6 +109,8 @@ node .agents/scripts/validate-artifact.js gate import-dependabot .agents/workspa
   - Gemini CLI：/agent-infra:analyze-task {task-id}
   - Codex CLI：$analyze-task {task-id}
 ```
+
+
 
 ## 完成检查清单
 

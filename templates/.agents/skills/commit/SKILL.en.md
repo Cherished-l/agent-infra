@@ -17,6 +17,10 @@ When updating related `task.md` frontmatter, read `.agents/rules/version-stamp.m
 | "`git add -A` is faster." | `git add -A` and `git add .` are forbidden; stage only explicitly listed files to avoid including unrelated changes. |
 | "This file has a copyright header, but the year can wait." | If you changed it, update the copyright year using `date +%Y`; this is a hard pre-commit check. |
 
+## Task id short ref
+
+> If `{task-id}` begins with `#`, follow the "SKILL parameter resolver" section of `.agents/rules/task-short-id.md`; treat `{task-id}` as the resolved full `TASK-YYYYMMDD-HHMMSS` form for every downstream command.
+
 ## 1. Check Local Modifications (CRITICAL)
 
 Before any edit, inspect:
