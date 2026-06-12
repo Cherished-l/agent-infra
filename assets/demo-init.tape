@@ -16,7 +16,7 @@ Require tree
 Set Shell "zsh"
 Set FontSize 32
 Set Width 1920
-Set Height 1200
+Set Height 1600
 Set Padding 40
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 50ms
@@ -85,14 +85,21 @@ Sleep 1s
 
 # Prompt 6: Require Pull Request flow — accept default (yes)
 Enter
+Wait+Screen /Built-in TUI/
+Sleep 3s
+
+# Prompt 7: Built-in TUI command files — keep all four built-in TUIs
+Type "1,2,3,4"
+Sleep 500ms
+Enter
 Wait+Screen /Template sources/
 Sleep 1s
 
-# Prompt 7: Template sources — skip (Enter)
+# Prompt 8: Template sources — skip (Enter)
 Enter
 Sleep 1s
 
-# Prompt 8: Skill sources — skip (Enter)
+# Prompt 9: Skill sources — skip (Enter)
 Enter
 Sleep 5s
 
