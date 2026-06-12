@@ -6,7 +6,7 @@
     "type": "github"
   },
   "requiresPullRequest": true,
-  "templateVersion": "v0.7.0",
+  "templateVersion": "v0.7.1",
   "sandbox": {
     "engine": "orbstack",
     "runtimes": [
