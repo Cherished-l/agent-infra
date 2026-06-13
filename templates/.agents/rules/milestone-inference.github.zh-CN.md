@@ -81,7 +81,10 @@ if [ "$has_triage" = "true" ]; then
 fi
 ```
 
-6. 如果 `has_triage=false`、目标 milestone 不存在，或无法可靠判断 -> 保持原 milestone 不变
+6. 仅在以下情况保持原 milestone 不变（其余情形必须按步骤 5 收窄）：
+   - 主干模式下版本线下没有 open 具体版本 —— `code-task` / `create-pr` 的 `verify_milestone_specific` gate 会 FAIL，提醒维护者补建具体版本
+   - 多版本分支模式下 `git merge-base --is-ancestor` 两条判断都不可靠或远程引用缺失
+   - 任意模式下 `has_triage=false`（由 bot 后补）
 
 具体版本查询建议：
 
