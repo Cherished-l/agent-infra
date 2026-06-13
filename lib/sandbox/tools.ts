@@ -35,7 +35,7 @@ function createBuiltinTools(home: string, project: string): Record<string, Sandb
     'claude-code': {
       id: 'claude-code',
       name: 'Claude Code',
-      install: { type: 'npm', cmd: '@anthropic-ai/claude-code@stable' },
+      install: { type: 'npm', cmd: '@anthropic-ai/claude-code@latest' },
       sandboxBase: hostJoin(home, '.agent-infra', 'sandboxes', 'claude-code'),
       containerMount: '/home/devuser/.claude',
       versionCmd: 'claude --version',
