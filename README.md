@@ -165,6 +165,9 @@ curl -fsSL https://raw.githubusercontent.com/fitlab-ai/agent-infra/main/install.
 **Option C - Homebrew (macOS)**
 
 ```bash
+# Newer Homebrew refuses to load formulae from third-party taps until trusted,
+# which silently blocks upgrades. Trust the tap once before installing.
+brew trust fitlab-ai/tap
 brew install fitlab-ai/tap/agent-infra
 ```
 

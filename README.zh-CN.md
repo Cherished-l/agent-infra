@@ -165,6 +165,9 @@ curl -fsSL https://raw.githubusercontent.com/fitlab-ai/agent-infra/main/install.
 **方式 C - Homebrew (macOS)**
 
 ```bash
+# 新版 Homebrew 默认拒绝加载第三方 tap 的 formula，
+# 会导致升级被静默跳过。首次安装前先信任本 tap。
+brew trust fitlab-ai/tap
 brew install fitlab-ai/tap/agent-infra
 ```
 
