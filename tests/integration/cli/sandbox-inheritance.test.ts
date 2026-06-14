@@ -500,6 +500,80 @@ test("ensureCodexModelInheritance keeps model fields before workspace trust sect
   }
 });
 
+test("ensureCodexModelInheritance inherits model_auto_compact_token_limit", async () => {
+  const sandboxCreate = await loadFreshEsm<SandboxCreateModule>("lib/sandbox/commands/create.js");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-compact-"));
+  const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-host-compact-"));
+
+  try {
+    fs.mkdirSync(path.join(hostHome, ".codex"), { recursive: true });
+    fs.writeFileSync(
+      path.join(hostHome, ".codex", "config.toml"),
+      'model = "gpt-5.5"\nmodel_auto_compact_token_limit = 206720\n',
+      "utf8"
+    );
+    sandboxCreate.ensureCodexModelInheritance(tmpDir, hostHome);
+    const data = toml.parse(fs.readFileSync(path.join(tmpDir, "config.toml"), "utf8")) as {
+      model?: string;
+      model_auto_compact_token_limit?: number;
+    };
+    assert.equal(data.model, "gpt-5.5");
+    assert.equal(data.model_auto_compact_token_limit, 206720);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(hostHome, { recursive: true, force: true });
+  }
+});
+
+test("ensureCodexModelInheritance skips invalid numeric inherits", async () => {
+  const sandboxCreate = await loadFreshEsm<SandboxCreateModule>("lib/sandbox/commands/create.js");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-compact-invalid-"));
+  const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-host-compact-invalid-"));
+
+  try {
+    fs.mkdirSync(path.join(hostHome, ".codex"), { recursive: true });
+    fs.writeFileSync(
+      path.join(hostHome, ".codex", "config.toml"),
+      'model = "gpt-5.5"\nmodel_auto_compact_token_limit = 0\n',
+      "utf8"
+    );
+    sandboxCreate.ensureCodexModelInheritance(tmpDir, hostHome);
+    const data = toml.parse(fs.readFileSync(path.join(tmpDir, "config.toml"), "utf8")) as {
+      model?: string;
+      model_auto_compact_token_limit?: number;
+    };
+    assert.equal(data.model, "gpt-5.5");
+    assert.equal(data.model_auto_compact_token_limit, undefined);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(hostHome, { recursive: true, force: true });
+  }
+});
+
+test("ensureCodexModelInheritance preserves existing sandbox model_auto_compact_token_limit", async () => {
+  const sandboxCreate = await loadFreshEsm<SandboxCreateModule>("lib/sandbox/commands/create.js");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-compact-keep-"));
+  const hostHome = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-host-compact-keep-"));
+
+  try {
+    fs.mkdirSync(path.join(hostHome, ".codex"), { recursive: true });
+    fs.writeFileSync(
+      path.join(hostHome, ".codex", "config.toml"),
+      'model_auto_compact_token_limit = 206720\n',
+      "utf8"
+    );
+    fs.writeFileSync(path.join(tmpDir, "config.toml"), "model_auto_compact_token_limit = 150000\n", "utf8");
+    sandboxCreate.ensureCodexModelInheritance(tmpDir, hostHome);
+    const data = toml.parse(fs.readFileSync(path.join(tmpDir, "config.toml"), "utf8")) as {
+      model_auto_compact_token_limit?: number;
+    };
+    assert.equal(data.model_auto_compact_token_limit, 150000);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(hostHome, { recursive: true, force: true });
+  }
+});
+
 test("ensureCodexModelInheritance ignores model fields outside the root table", async () => {
   const sandboxCreate = await loadFreshEsm<SandboxCreateModule>("lib/sandbox/commands/create.js");
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-codex-model-section-"));

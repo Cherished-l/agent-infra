@@ -868,13 +868,22 @@ export function ensureCodexModelInheritance(toolDir: string, hostHomeDir?: strin
     }
   }
 
+  const inheritSpecs: Array<readonly [string, 'string' | 'number']> = [
+    ['model', 'string'],
+    ['model_reasoning_effort', 'string'],
+    ['model_auto_compact_token_limit', 'number']
+  ];
+
   let changed = false;
-  for (const key of ['model', 'model_reasoning_effort']) {
+  for (const [key, type] of inheritSpecs) {
     if (Object.hasOwn(sandboxParsed, key)) {
       continue;
     }
     const value = hostParsed[key];
-    if (typeof value !== 'string' || value === '') {
+    if (type === 'string' && (typeof value !== 'string' || value === '')) {
+      continue;
+    }
+    if (type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)) {
       continue;
     }
     sandboxParsed[key] = value;
