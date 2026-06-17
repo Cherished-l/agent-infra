@@ -33,6 +33,7 @@ type ValidatorCheck = {
   type: string;
   status: string;
   fail_type?: string;
+  message?: string;
   warnings?: string[];
 };
 type ValidatorPayload = {

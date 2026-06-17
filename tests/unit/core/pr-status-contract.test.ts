@@ -33,8 +33,10 @@ function requiredSkippedDecisionCell(content: string): string | null {
     if (cells.length < 4) continue;
     const prFlow = cells[1];
     const prStatus = cells[2];
+    const decision = cells[3];
+    if (!prFlow || !prStatus || decision === undefined) continue;
     if (/required/.test(prFlow) && /pending/.test(prStatus) && /skipped/.test(prStatus)) {
-      return cells[3];
+      return decision;
     }
   }
   return null;

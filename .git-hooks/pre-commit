@@ -8,6 +8,10 @@ script_dir=$(
 "$script_dir/check-utf8-encoding.sh"
 "$script_dir/check-version-format.sh"
 
+# Fail fast on TypeScript errors before paying for the test suite (~1s warm).
+# typecheck covers tests/ + scripts/ which the production `build` step skips.
+npm run typecheck
+
 # Run the project's core test layer before allowing the commit.
 # package.json#scripts.test:core covers the core unit and structural checks
 # while skipping the slowest platform-sync contract suites (those run in CI).

@@ -436,7 +436,17 @@ test("buildImage forwards AI_TOOLS_SHELL_INSTALL_B64= empty for the default npm-
 
   sandboxCreate.buildImage(
     { project: "demo", imageName: "demo-sandbox:latest", repoRoot: "/repo" },
-    [{ install: { type: "npm", cmd: "@acme/tool" } }],
+    [
+      {
+        id: "npm-only",
+        name: "Npm Only",
+        install: { type: "npm", cmd: "@acme/tool" },
+        sandboxBase: "/home/host-user/.agent-infra/sandboxes/npm-only",
+        containerMount: "/home/devuser/.npm-only",
+        versionCmd: "npm-only --version",
+        setupHint: "fixture"
+      }
+    ],
     "/tmp/Dockerfile",
     "sig-npm-only",
     {

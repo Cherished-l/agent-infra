@@ -1085,7 +1085,7 @@ function runEngineTaskCommand(engine: string, cmd: string, args: string[], opts:
 }
 
 export function buildImage(
-  config: SandboxCreateConfig,
+  config: Pick<SandboxCreateConfig, 'project' | 'imageName' | 'repoRoot'> & { engine?: string | null },
   tools: SandboxTool[],
   dockerfilePath: string,
   imageSignature: string,
@@ -1103,7 +1103,7 @@ export function buildImage(
     env?: NodeJS.ProcessEnv;
   } = {}
 ): void {
-  const selectedEngine = engine ?? detectEngine(config);
+  const selectedEngine = engine ?? detectEngine({ engine: config.engine });
   const { uid: hostUid, gid: hostGid } = resolveBuildUid({
     engine: selectedEngine,
     runFn,
