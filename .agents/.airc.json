@@ -100,5 +100,8 @@
       ".agents/rules/cross-platform-tests.md",
       ".github/scripts/generate-bottle-block.mjs"
     ]
+  },
+  "task": {
+    "shortIdLength": 2
   }
 }
