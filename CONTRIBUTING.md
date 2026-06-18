@@ -176,6 +176,8 @@ Use the project's `Issue` tracker to report and track issues, requirements, and 
 
 ## Contribution Guidelines
 
+All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md) when participating in this project.
+
 Contributors who wish to participate in the project should follow these steps:
 
 1. Fork this project.
