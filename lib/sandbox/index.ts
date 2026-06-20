@@ -6,9 +6,6 @@ Commands:
                                Enter sandbox or run a command. N (bare) is the
                                recommended form for task short ids (e.g.
                                'ai sandbox exec 11'); '#N' is also accepted.
-  start <branch | TASK-id | N | '#N'>
-                               Start an existing stopped sandbox container
-                               (e.g. after the Docker daemon restarted)
   ls                           List sandboxes for the current project (the '#'
                                column is a display-only row number; the 'SHORT'
                                column shows the active task short id, '-' if none)
@@ -19,6 +16,9 @@ Commands:
   rm <branch> | --all | --purge
                                Remove one sandbox, all sandboxes not bound to an
                                active task (--all), or tear down everything (--purge)
+  start <branch | TASK-id | N | '#N'>
+                               Start an existing stopped sandbox container
+                               (e.g. after the Docker daemon restarted)
   vm status|start|stop         Manage the sandbox VM (macOS) or check the backend (Windows)
 
 Run 'ai sandbox <command> --help' for details.`;
@@ -51,6 +51,21 @@ export async function runSandbox(args: string[]): Promise<void> {
       }
       break;
     }
+    case 'ls': {
+      const { ls } = await import('./commands/ls.ts');
+      ls(rest);
+      break;
+    }
+    case 'prune': {
+      const { prune } = await import('./commands/prune.ts');
+      await prune(rest);
+      break;
+    }
+    case 'rebuild': {
+      const { rebuild } = await import('./commands/rebuild.ts');
+      await rebuild(rest);
+      break;
+    }
     case 'refresh': {
       const { refresh } = await import('./commands/refresh.ts');
       const exitCode = await refresh(rest);
@@ -59,34 +74,19 @@ export async function runSandbox(args: string[]): Promise<void> {
       }
       break;
     }
-    case 'start': {
-      const { start } = await import('./commands/start.ts');
-      await start(rest);
-      break;
-    }
-    case 'ls': {
-      const { ls } = await import('./commands/ls.ts');
-      ls(rest);
-      break;
-    }
     case 'rm': {
       const { rm } = await import('./commands/rm.ts');
       await rm(rest);
       break;
     }
-    case 'prune': {
-      const { prune } = await import('./commands/prune.ts');
-      await prune(rest);
+    case 'start': {
+      const { start } = await import('./commands/start.ts');
+      await start(rest);
       break;
     }
     case 'vm': {
       const { vm } = await import('./commands/vm.ts');
       await vm(rest);
-      break;
-    }
-    case 'rebuild': {
-      const { rebuild } = await import('./commands/rebuild.ts');
-      await rebuild(rest);
       break;
     }
     default:
