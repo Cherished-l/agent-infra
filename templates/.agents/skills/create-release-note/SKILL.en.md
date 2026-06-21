@@ -160,7 +160,21 @@ Ask:
 
 ### 9. Publish the Release Notes (If Confirmed)
 
-Write the notes by following the "Publish the Release Notes" command in `.agents/rules/release-commands.md` (it updates the Release already created and published by the release workflow, falling back to creating it if missing).
+9.1 Write the generated notes to a temp file **outside the working tree** so no uncommitted artifact is left behind in the repo (do not write into `.agents/workspace/` or any version-controlled directory):
+
+```bash
+NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/agent-infra-release-notes.XXXXXX")"
+```
+
+Write the notes content to `$NOTES_FILE`.
+
+9.2 Publish by following the "Publish the Release Notes" command in `.agents/rules/release-commands.md` (use `$NOTES_FILE` for `{notes-file}`; it updates the Release already created and published by the release workflow, falling back to creating it if missing).
+
+9.3 Remove the temp file whether publishing succeeds or fails:
+
+```bash
+rm -f "$NOTES_FILE"
+```
 
 Output:
 ```
@@ -179,6 +193,7 @@ The notes have been written to the Release. Edit further at the URL above if nee
 2. **Tags must exist**: Run the release skill first to create tags
 3. **Release auto-published**: the `v{version}` Release is created and published by the release workflow (the upload target for Homebrew bottles); this skill writes/refreshes the notes on that Release
 4. **Classification accuracy**: Auto-classification is based on title/scope/files; complex PRs may need manual adjustment
+5. **No leftover artifacts**: Always write notes to a temp file outside the working tree (`mktemp`) and delete it after publishing; never write into the repo directory
 
 ## Error Handling
 

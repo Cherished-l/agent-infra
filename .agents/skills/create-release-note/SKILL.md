@@ -160,7 +160,21 @@ git log v<prev-version>..v<version> \
 
 ### 9. 发布 Release notes（如确认）
 
-按 `.agents/rules/release-commands.md` 的「发布 Release notes」命令执行（写入已由 release 工作流自动创建/发布的 Release；不存在时兜底创建）。
+9.1 把生成的 notes 写入**工作树之外**的临时文件，避免在仓库残留未提交产物（不要写入 `.agents/workspace/` 或任何受版本控制的目录）：
+
+```bash
+NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/agent-infra-release-notes.XXXXXX")"
+```
+
+把 notes 内容写入 `$NOTES_FILE`。
+
+9.2 按 `.agents/rules/release-commands.md` 的「发布 Release notes」命令执行（命令中的 `{notes-file}` 用 `$NOTES_FILE`；写入已由 release 工作流自动创建/发布的 Release，不存在时兜底创建）。
+
+9.3 无论发布成功或失败，都删除临时文件：
+
+```bash
+rm -f "$NOTES_FILE"
+```
 
 输出：
 ```
@@ -179,6 +193,7 @@ Release notes 已更新。
 2. **标签必须存在**：先执行 release 技能创建标签
 3. **Release 已自动发布**：`v{version}` 的 Release 由 release 工作流自动创建并发布（给 Homebrew bottle 提供上传落点）；本技能往该 Release 写入/刷新 notes
 4. **分类准确性**：自动分类基于标题/scope/文件；复杂的 PR 可能需要手动调整
+5. **不留残留产物**：notes 一律写入工作树之外的临时文件（`mktemp`）并在发布后删除，禁止写入仓库目录
 
 ## 错误处理
 
