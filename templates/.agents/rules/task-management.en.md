@@ -37,3 +37,28 @@ Map user intent to the corresponding workflow command:
 - `complete-task`: update `status`, `current_step`, `completed_at`, `updated_at`, `agent_infra_version`
 - `block-task`: update `status`, `blocked_at`, `blocked_reason`, `updated_at`, `agent_infra_version`
 - `cancel-task`: update `status`, `cancelled_at`, `cancel_reason`, `updated_at`, `agent_infra_version`
+
+## Activity Log started / done dual-marker convention (single source of truth)
+
+> This section is the sole authoritative definition of the started/done dual marker. The skills, the renderer (`lib/task/commands/log.ts`), and the validator (`.agents/scripts/validate-artifact.js`) all defer to it; keep this section in sync when changing any of them.
+
+**Line grammar is unchanged**: both started and done use the existing entry grammar `- {YYYY-MM-DD HH:mm:ss±HH:MM} — **{action}** by {agent} — {note}`, so the parsing regexes (`log.ts:ENTRY_RE` and `validate-artifact.js:ACTIVITY_LOG_PATTERN`) need no change.
+
+- **started line** (written when the step begins): the action suffixes the existing base with ` [started]`, note is `started`:
+  `- {time} — **{base} [started]** by {agent} — started`
+- **done line** (written when the step completes, unchanged from today): the action is the base itself:
+  `- {time} — **{base}** by {agent} — {completion summary}`
+- `{base}` is that skill's existing done action text, including `(Round {N})` (e.g. `Plan Task (Round 1)`). started and done must share the same `{base}` to pair.
+
+**Pairing and rendering** (`ai task log`): a started entry pairs with the next same-`{base}` done entry onto one row (repeated executions of the same base pair FIFO by ascending time). The STARTED column shows the start time, DONE the completion time; started with no done = in progress (DONE shows `(in progress)`); done with no started (legacy logs) = a standalone completed row. All three shapes are valid and never error.
+
+**Gate** (`checkActivityLog`): when computing the "latest action / freshness" it skips `[started]` lines (ascending-order and format checks still cover every line), so a started marker never satisfies a skill's `expected_action_pattern`.
+
+**Skills that write started**: every workflow skill that **appends entries to a task's `## Activity Log`** writes started, so the STARTED column stays uniformly complete across the whole `ai task log` table. Two forms, depending on whether task.md already exists:
+
+- **Standard form (task.md already exists)** — append the started line when that round's real work begins (after prerequisites, before the first artifact action) and the done line on completion:
+  `analyze-task`, `plan-task`, `code-task`, `review-analysis`, `review-plan`, `review-code`, `commit`, `complete-task`, `create-pr`, `watch-pr`, `block-task`, `cancel-task`, `restore-task`, `close-codescan`, `close-dependabot`.
+- **Deferred form (the skill creates task.md, so there is no file to write to at the start)** — capture `started_at` in memory before running, then when writing the Activity Log at the end, **append both lines at once** (started line uses `started_at`, done line uses the completion time):
+  `create-task`, `import-issue`, `import-codescan`, `import-dependabot`.
+
+**Exceptions**: read-only inspection skills that do not represent real progress (e.g. `check-task`) do not write started. A bare operation with no task.md context (e.g. a `commit` not tied to a task) likewise skips it.
