@@ -1084,6 +1084,13 @@ function runEngineTaskCommand(engine: string, cmd: string, args: string[], opts:
   return runTaskCommand(command.cmd, command.args, opts);
 }
 
+// `docker run` args for mounting a tool's containerMount as an in-container
+// tmpfs. containerMount is an in-container path, so it is NOT engine-converted.
+export function buildTmpfsRunArgs(containerMount: string, tmpfs: { size?: string }): string[] {
+  const size = tmpfs.size ?? '512m';
+  return ['--tmpfs', `${containerMount}:rw,size=${size}`];
+}
+
 export function buildImage(
   config: Pick<SandboxCreateConfig, 'project' | 'imageName' | 'repoRoot'> & { engine?: string | null },
   tools: SandboxTool[],
@@ -1397,10 +1404,12 @@ export async function create(args: string[]): Promise<void> {
               // The TUI reads <toolDir>/opencode.json via OPENCODE_CONFIG pinned in tools.js.
               ensureOpenCodeModelInheritance(opencodeEntry.dir, effectiveConfig.home);
             }
-            const toolVolumes = effectiveResolvedTools.flatMap(({ tool, dir }) => [
-              '-v',
-              volumeArg(engine, dir, tool.containerMount)
-            ]);
+            const toolVolumes = effectiveResolvedTools.flatMap(({ tool, dir }) =>
+              tool.tmpfs ? [] : ['-v', volumeArg(engine, dir, tool.containerMount)]
+            );
+            const tmpfsArgs = effectiveResolvedTools.flatMap(({ tool }) =>
+              tool.tmpfs ? buildTmpfsRunArgs(tool.containerMount, tool.tmpfs) : []
+            );
             const workspaceDir = path.join(effectiveConfig.repoRoot, '.agents', 'workspace');
             hostShellConfig = prepareHostShellConfig({
               home: effectiveConfig.home,
@@ -1412,6 +1421,24 @@ export async function create(args: string[]): Promise<void> {
               '-v',
               volumeArg(engine, hostPath, containerPath, ':ro')
             ]);
+            // A tmpfs containerMount starts empty, so the config seeded into the
+            // host dir before launch would be invisible in-container. Bind only
+            // the explicitly declared seed entries (config.toml, model-catalogs)
+            // back over the tmpfs as nested mounts — the same proven mechanism as
+            // hostLiveMounts/auth.json, established at `docker run` time (no
+            // post-start `docker cp`, which can land under a freshly-mounted
+            // tmpfs instead of inside it). The allowlist is deliberate: any
+            // runtime files left in the host dir (e.g. a stale logs_2.sqlite or
+            // sessions/ from a previous bind-mount era) must NOT be re-mounted,
+            // or the high-churn writes would land on the host SSD again.
+            const tmpfsSeedVolumes = effectiveResolvedTools.flatMap(({ tool, dir }) =>
+              (tool.tmpfs?.seed ?? []).flatMap((entry) => {
+                const hostPath = path.join(dir, entry);
+                return fs.existsSync(hostPath)
+                  ? ['-v', volumeArg(engine, hostPath, path.posix.join(tool.containerMount, entry))]
+                  : [];
+              })
+            );
             const liveMountVolumes = effectiveResolvedTools.flatMap(({ tool }) =>
               (tool.hostLiveMounts ?? [])
                 .filter(({ hostPath }) => fs.existsSync(hostPath))
@@ -1466,6 +1493,8 @@ export async function create(args: string[]): Promise<void> {
               volumeArg(engine, hostJoin(effectiveConfig.home, '.ssh'), '/home/devuser/.ssh', ':ro'),
               ...dotfilesMount,
               ...toolVolumes,
+              ...tmpfsArgs,
+              ...tmpfsSeedVolumes,
               ...liveMountVolumes,
               ...shellConfigVolumes,
               ...envFile.dockerArgs,
