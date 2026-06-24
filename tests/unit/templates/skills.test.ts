@@ -259,6 +259,56 @@ test("review report templates include the self-doubt section", () => {
   });
 });
 
+test("review report templates record the reviewed artifact", () => {
+  // Each review stage's report template must demonstrate the actually reviewed
+  // upstream artifact as a backtick-wrapped filename in the Review Input field,
+  // not only the `{...-artifact}` placeholder, so the recorded-artifact contract
+  // cannot silently regress. Structural check only (field block + filename shape).
+  const ANALYSIS = /`analysis(?:-r\d+)?\.md`/;
+  const PLAN = /`plan(?:-r\d+)?\.md`/;
+  const CODE = /`code(?:-r\d+)?\.md`/;
+  const reviewInputCases: Array<[string, string, RegExp]> = [
+    [".agents/skills/review-analysis/reference/report-template.md", "审查输入", ANALYSIS],
+    ["templates/.agents/skills/review-analysis/reference/report-template.zh-CN.md", "审查输入", ANALYSIS],
+    ["templates/.agents/skills/review-analysis/reference/report-template.en.md", "Review Input", ANALYSIS],
+    [".agents/skills/review-plan/reference/report-template.md", "审查输入", PLAN],
+    ["templates/.agents/skills/review-plan/reference/report-template.zh-CN.md", "审查输入", PLAN],
+    ["templates/.agents/skills/review-plan/reference/report-template.en.md", "Review Input", PLAN],
+    [".agents/skills/review-code/reference/report-template.md", "审查输入", CODE],
+    ["templates/.agents/skills/review-code/reference/report-template.zh-CN.md", "审查输入", CODE],
+    ["templates/.agents/skills/review-code/reference/report-template.en.md", "Review Input", CODE],
+  ];
+
+  // Collect the Review Input field header line plus its indented sub-bullets.
+  const extractReviewInputBlock = (content: string, field: string): string => {
+    const headerPattern = new RegExp(`\\*\\*${escapeRegExp(field)}\\*\\*`);
+    const block: string[] = [];
+    let inBlock = false;
+    for (const line of content.split(/\r?\n/)) {
+      if (headerPattern.test(line)) {
+        inBlock = true;
+        block.push(line);
+        continue;
+      }
+      if (!inBlock) continue;
+      if (/^\s+[-*]\s/.test(line)) {
+        block.push(line);
+        continue;
+      }
+      break;
+    }
+    return block.join("\n");
+  };
+
+  reviewInputCases.forEach(([relativePath, field, artifactPattern]) => {
+    const content = read(relativePath);
+    assert.match(content, new RegExp(`\\*\\*${escapeRegExp(field)}\\*\\*`));
+
+    const block = extractReviewInputBlock(content, field);
+    assert.match(block, artifactPattern);
+  });
+});
+
 test("review criteria keep common review principles consistent across review stages", () => {
   const localPrinciples = [
     ".agents/skills/review-analysis/reference/review-criteria.md",
