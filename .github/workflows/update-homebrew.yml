@@ -146,7 +146,11 @@ jobs:
             platform: arm64_sonoma
     steps:
       - name: Configure brew tap
-        run: brew tap fitlab-ai/tap
+        run: |
+          brew tap fitlab-ai/tap
+          # Homebrew 6.0+ refuses to load formulae from untrusted third-party
+          # taps; trust our own tap so --build-bottle can load the formula.
+          brew trust fitlab-ai/tap
 
       - name: Build bottle
         env:
