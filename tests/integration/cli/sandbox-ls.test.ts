@@ -10,6 +10,13 @@ import { cliArgs, envWithPrependedPath, gitSafeEnv, writeSandboxEngineFixture } 
 // clack renders section headers (p.log.step) on stdout prefixed with this glyph.
 const STEP_GLYPH = '◇'; // ◇
 
+// clack colorizes the glyph (e.g. `\x1B[32m◇\x1B[39m`), so when color is enabled
+// an ANSI reset sits between the glyph and the header text. Strip ANSI before
+// matching the header layout so the assertions hold regardless of FORCE_COLOR.
+function stripAnsi(text: string): string {
+  return text.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
 function spawnSandboxCli(
   fixture: ReturnType<typeof writeSandboxEngineFixture>,
   tmpDir: string,
@@ -64,7 +71,7 @@ test('ai sandbox ls shows only the Containers section (no worktree/state section
     // (not a reverse "does not contain Worktrees" check).
     const sectionCount = (result.stdout.match(new RegExp(STEP_GLYPH, 'g')) || []).length;
     assert.equal(sectionCount, 1, `expected exactly one section, got ${sectionCount}: ${result.stdout}`);
-    assert.match(result.stdout, new RegExp(`${STEP_GLYPH}\\s+Containers`));
+    assert.match(stripAnsi(result.stdout), new RegExp(`${STEP_GLYPH}\\s+Containers`));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -80,7 +87,7 @@ test('ai sandbox ls reports an empty state with no extra sections', () => {
     assert.equal(result.status, 0, result.stderr);
     const sectionCount = (result.stdout.match(new RegExp(STEP_GLYPH, 'g')) || []).length;
     assert.equal(sectionCount, 1, `expected exactly one section, got ${sectionCount}: ${result.stdout}`);
-    assert.match(result.stdout, new RegExp(`${STEP_GLYPH}\\s+Containers`));
+    assert.match(stripAnsi(result.stdout), new RegExp(`${STEP_GLYPH}\\s+Containers`));
     assert.match(result.stdout, /No sandbox containers/);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
