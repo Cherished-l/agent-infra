@@ -6,6 +6,10 @@
 .agents/workspace/logs/
 .agents/workspace/.merge-backup/
 
+# agent-infra-server local secrets (in-repo). Runtime state (PID, logs) lives
+# under ~/.agent-infra/, outside the repo, so it needs no ignore rule here.
+.agents/server.local.json
+
 # Claude Code local settings
 .claude/settings.local.json
 
