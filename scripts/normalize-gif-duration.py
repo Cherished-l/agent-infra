@@ -7,14 +7,63 @@ import sys
 def locate_gce_offsets(data):
     """Return the start offsets of all Graphic Control Extension blocks."""
     offsets = []
-    index = 0
+    if len(data) < 13 or data[:3] != b"GIF":
+        return offsets
 
-    while index < len(data) - 7:
-        if data[index] == 0x21 and data[index + 1] == 0xF9 and data[index + 2] == 0x04:
-            offsets.append(index)
-            index += 8
-        else:
+    index = 13
+    packed = data[10]
+    if packed & 0x80:
+        index += 3 * (2 ** ((packed & 0x07) + 1))
+
+    while index < len(data):
+        block_type = data[index]
+
+        if block_type == 0x3B:
+            break
+
+        if block_type == 0x21:
+            if index + 2 >= len(data):
+                break
+
+            label = data[index + 1]
+            if label == 0xF9:
+                if index + 8 > len(data) or data[index + 2] != 0x04:
+                    break
+                offsets.append(index)
+                index += 8
+                continue
+
+            index += 2
+            while index < len(data):
+                block_size = data[index]
+                index += 1
+                if block_size == 0:
+                    break
+                index += block_size
+            continue
+
+        if block_type == 0x2C:
+            if index + 10 > len(data):
+                break
+
+            packed = data[index + 9]
+            index += 10
+            if packed & 0x80:
+                index += 3 * (2 ** ((packed & 0x07) + 1))
+
+            if index >= len(data):
+                break
+
             index += 1
+            while index < len(data):
+                block_size = data[index]
+                index += 1
+                if block_size == 0:
+                    break
+                index += block_size
+            continue
+
+        break
 
     return offsets
 

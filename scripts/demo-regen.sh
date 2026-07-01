@@ -33,6 +33,14 @@ fi
 for name in ai agent-infra; do
   cat >"$shim_dir/$name" <<SHIM
 #!/bin/sh
+if [ -n "\${DEMO_VERSION:-}" ] && [ "\${1:-}" = "version" ]; then
+  if [ "\${2:-}" = "--raw" ]; then
+    printf '%s\n' "\$DEMO_VERSION"
+  else
+    printf 'agent-infra %s\n' "\$DEMO_VERSION"
+  fi
+  exit 0
+fi
 exec node "$local_cli" "\$@"
 SHIM
   chmod +x "$shim_dir/$name"
@@ -51,9 +59,12 @@ vhs "$tmp"
 
 # ── Sanity check: local CLI version should match package.json ──
 pkg_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+expected_version="${DEMO_VERSION:-$pkg_version}"
+expected_version="${expected_version#v}"
 shim_version=$("$shim_dir/ai" version --raw 2>/dev/null || echo "")
-if [ -n "$pkg_version" ] && [ -n "$shim_version" ] && [ "$pkg_version" != "$shim_version" ]; then
-  echo "demo-regen: WARNING dist/bin/cli.js reports $shim_version but package.json is $pkg_version (rebuild before recording)." >&2
+shim_version="${shim_version#v}"
+if [ -n "$expected_version" ] && [ -n "$shim_version" ] && [ "$expected_version" != "$shim_version" ]; then
+  echo "demo-regen: WARNING demo version reports $shim_version but expected $expected_version (rebuild before recording)." >&2
 fi
 
 # ── Encode GIF with color-accurate palette ──

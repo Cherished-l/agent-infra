@@ -8,7 +8,27 @@ import path from "node:path";
 import { envWithPrependedPath, read } from "../../helpers.ts";
 
 function makeFakeGif(frameCount: number, initialDelayCs: number = 2): Buffer {
-  const bytes = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
+  const bytes = [
+    0x47,
+    0x49,
+    0x46,
+    0x38,
+    0x39,
+    0x61,
+    0x01,
+    0x00,
+    0x01,
+    0x00,
+    0x80,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0xff,
+    0xff,
+    0xff
+  ];
 
   for (let index = 0; index < frameCount; index += 1) {
     bytes.push(
@@ -21,9 +41,56 @@ function makeFakeGif(frameCount: number, initialDelayCs: number = 2): Buffer {
       0x00,
       0x00
     );
+    bytes.push(
+      0x2c,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x02,
+      0x02,
+      0x4c,
+      0x01,
+      0x00
+    );
   }
 
   bytes.push(0x3B);
+  return Buffer.from(bytes);
+}
+
+function makeFakeGifWithImageDataMarker(): Buffer {
+  const bytes = Array.from(makeFakeGif(1));
+  const trailer = bytes.pop();
+
+  assert.equal(trailer, 0x3B);
+  bytes.push(
+    0x2c,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x02,
+    0x05,
+    0x00,
+    0x21,
+    0xF9,
+    0x04,
+    0x00,
+    0x00,
+    0x3B
+  );
+
   return Buffer.from(bytes);
 }
 
@@ -190,6 +257,33 @@ test("normalize-gif-duration leaves files without GCE blocks unchanged", () => {
   }
 });
 
+test("normalize-gif-duration ignores GCE-like bytes inside image data", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "normalize-gif-"));
+  const gifPath = path.join(tempDir, "demo.gif");
+
+  try {
+    const original = makeFakeGifWithImageDataMarker();
+    fs.writeFileSync(gifPath, original);
+
+    const result = spawnSync(
+      resolvePythonCommand(),
+      ["scripts/normalize-gif-duration.py", gifPath, "25"],
+      {
+        cwd: path.resolve("."),
+        encoding: "utf8"
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Normalized: 1 frames, 25000ms, total 25\.0s/);
+
+    const normalized = fs.readFileSync(gifPath);
+    assert.equal(normalized.includes(Buffer.from([0x00, 0x21, 0xF9, 0x04, 0x00])), true);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("demo-regen merges local settings before running VHS and normalizes output", () => {
   const fixture = setupDemoRegenFixture({ withLocalSettings: true });
   const {
@@ -270,6 +364,32 @@ echo "GLOBAL-FAKE"
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(fs.readFileSync(capturedAiOutPath, "utf8").trim(), "9.9.9-test");
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test("demo-regen can pin the displayed demo version", () => {
+  const fixture = setupDemoRegenFixture({ withLocalSettings: false });
+  const {
+    repoDir,
+    capturedAiOutPath,
+    env
+  } = fixture;
+
+  try {
+    const result = spawnSync("sh", ["scripts/demo-regen.sh"], {
+      cwd: repoDir,
+      encoding: "utf8",
+      env: {
+        ...env,
+        DEMO_VERSION: "v0.8.0"
+      }
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(capturedAiOutPath, "utf8").trim(), "v0.8.0");
+    assert.doesNotMatch(result.stderr, /WARNING/);
   } finally {
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
