@@ -16,9 +16,11 @@ Usage: ai <command> [options]
 
 Commands:
   cp <ssh-alias>  Copy local clipboard image to a remote macOS NSPasteboard
+  decide          Record a human decision for a task HD item
   help            Show this help message
   init            Initialize a new project with update-agent-infra seed command
   merge           Merge tasks from another workspace directory (active/blocked/completed/archive)
+  run             Run a whitelisted lifecycle skill through a non-interactive TUI
   sandbox, s      Manage Docker-based AI sandboxes
   server          Run the local AI collaboration daemon (start/stop/status/logs)
   task, t         Read-only views over .agents/workspace tasks (cat / files / grep / log / ls / show / status)
@@ -69,21 +71,29 @@ async function importCommand(importPath: string) {
 }
 
 switch (command) {
+  case 'cp': {
+    const imported = await importCommand('../lib/cp.ts');
+    if (!imported) break;
+    const { cmdCp } = imported;
+    const code = await cmdCp(process.argv.slice(3)).catch((e: unknown) => {
+      process.stderr.write(`Error: ${errorMessage(e)}\n`);
+      return 1;
+    });
+    if (code) process.exitCode = code;
+    break;
+  }
+  case 'decide': {
+    const imported = await importCommand('../lib/decide.ts');
+    if (!imported) break;
+    const { cmdDecide } = imported;
+    await cmdDecide(process.argv.slice(3));
+    break;
+  }
   case 'init': {
     const imported = await importCommand('../lib/init.ts');
     if (!imported) break;
     const { cmdInit } = imported;
     await cmdInit().catch((e: unknown) => {
-      process.stderr.write(`Error: ${errorMessage(e)}\n`);
-      process.exitCode = 1;
-    });
-    break;
-  }
-  case 'update': {
-    const imported = await importCommand('../lib/update.ts');
-    if (!imported) break;
-    const { cmdUpdate } = imported;
-    await cmdUpdate().catch((e: unknown) => {
       process.stderr.write(`Error: ${errorMessage(e)}\n`);
       process.exitCode = 1;
     });
@@ -97,6 +107,13 @@ switch (command) {
       process.stderr.write(`Error: ${errorMessage(e)}\n`);
       process.exitCode = 1;
     });
+    break;
+  }
+  case 'run': {
+    const imported = await importCommand('../lib/run/index.ts');
+    if (!imported) break;
+    const { cmdRun } = imported;
+    await cmdRun(process.argv.slice(3));
     break;
   }
   case 'sandbox': {
@@ -129,15 +146,14 @@ switch (command) {
     });
     break;
   }
-  case 'cp': {
-    const imported = await importCommand('../lib/cp.ts');
+  case 'update': {
+    const imported = await importCommand('../lib/update.ts');
     if (!imported) break;
-    const { cmdCp } = imported;
-    const code = await cmdCp(process.argv.slice(3)).catch((e: unknown) => {
+    const { cmdUpdate } = imported;
+    await cmdUpdate().catch((e: unknown) => {
       process.stderr.write(`Error: ${errorMessage(e)}\n`);
-      return 1;
+      process.exitCode = 1;
     });
-    if (code) process.exitCode = code;
     break;
   }
   case 'version': {
