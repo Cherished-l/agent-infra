@@ -13,7 +13,7 @@ completion time (or '(in progress)' while still running).
 Columns: # (row) / STEP / AGENT / STARTED / DONE / NOTE
   A human-executed step shows AGENT as 'human' and, when it has no start marker,
   a '-' STARTED placeholder. Review-step NOTE also carries two human counts in
-  the verdict list, right after blockers/major/minor: manual-verify (env-blocked)
+  the verdict list, right after blockers/major/minor: manual-validation
   and human-decision (current ledger stage total).
 `;
 
@@ -46,11 +46,6 @@ const STARTED_SUFFIX_RE = /\s*\[started\]\s*$/;
 // note these differ from the `.airc.json` long names claude-code/gemini-cli).
 // Any other executor token (a human name, possibly CJK) is treated as human.
 const KNOWN_AI_AGENTS = new Set(['claude', 'codex', 'gemini', 'opencode', 'cursor']);
-const ENV_BLOCKED_RE = /\(\+\s*(\d+)\s+env-blocked\)/i;
-// Same match plus any leading whitespace, so folding the count into the verdict
-// text drops the redundant `(+ n env-blocked)` fragment without leaving a gap.
-const ENV_BLOCKED_STRIP_RE = /\s*\(\+\s*\d+\s+env-blocked\)/i;
-const HUMAN_COUNTS_STRIP_RE = /(?:,\s*)?\bManual-verify:\s*\d+,\s*Human-decision:\s*\d+/gi;
 const REVIEW_STAGE_PREFIXES: { prefix: string; stage: ReviewStage }[] = [
   { prefix: 'Review Analysis', stage: 'analysis' },
   { prefix: 'Review Plan', stage: 'plan' },
@@ -127,9 +122,31 @@ function reviewStageForStep(step: string): ReviewStage | undefined {
   return REVIEW_STAGE_PREFIXES.find(({ prefix }) => step.startsWith(prefix))?.stage;
 }
 
+function splitArtifactSuffix(note: string): { verdict: string; suffix: string } {
+  const arrow = note.indexOf(' → ');
+  return arrow === -1 ? { verdict: note, suffix: '' } : { verdict: note.slice(0, arrow), suffix: note.slice(arrow) };
+}
+
+function fieldNumber(field: string, label: string): number | undefined {
+  const trimmed = field.trim();
+  const colon = trimmed.indexOf(':');
+  if (colon === -1) return undefined;
+  if (trimmed.slice(0, colon).trim().toLowerCase() !== label) return undefined;
+  const value = Number(trimmed.slice(colon + 1).trim());
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 function humanValidationCount(note: string): number {
-  const match = ENV_BLOCKED_RE.exec(note);
-  return match ? Number(match[1]) : 0;
+  const { verdict } = splitArtifactSuffix(note);
+  for (const field of verdict.split(',')) {
+    const value = fieldNumber(field, 'manual-validation');
+    if (value !== undefined) return value;
+  }
+  return 0;
+}
+
+function isHumanCountField(field: string): boolean {
+  return fieldNumber(field, 'manual-validation') !== undefined || fieldNumber(field, 'human-decision') !== undefined;
 }
 
 // A step is human-executed when its agent token is not a known AI token. Take
@@ -142,17 +159,17 @@ function isHumanAgent(agent: string): boolean {
 
 // Fold the two human counts into a review row's verdict NOTE: comma-joined, right
 // after the blockers/major/minor list and before the ` → artifact` link, mirroring
-// the review count line. The raw `(+ n env-blocked)` fragment is dropped so the
-// env-blocked number is not shown twice (it becomes the manual-verify count).
-function foldHumanCounts(note: string, decisions: number, envBlocked: number): string {
-  const base = note
-    .replace(ENV_BLOCKED_STRIP_RE, '')
-    .replace(HUMAN_COUNTS_STRIP_RE, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-  const group = `Manual-verify: ${envBlocked}, Human-decision: ${decisions}`;
-  const arrow = base.indexOf(' → ');
-  return arrow === -1 ? `${base}, ${group}` : `${base.slice(0, arrow)}, ${group}${base.slice(arrow)}`;
+// the review count line. Review done notes already carry `Manual-validation` as a
+// source field, so build the final verdict field list once instead of cleaning a
+// previously rendered string.
+function foldHumanCounts(note: string, decisions: number, manualValidation: number): string {
+  const { verdict, suffix } = splitArtifactSuffix(note);
+  const fields = verdict
+    .split(',')
+    .map((field) => field.trim())
+    .filter((field) => field !== '' && !isHumanCountField(field));
+  const group = `Manual-validation: ${manualValidation}, Human-decision: ${decisions}`;
+  return `${[...fields, group].join(', ')}${suffix}`;
 }
 
 function log(args: string[] = []): void {
