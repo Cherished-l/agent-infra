@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   collectMetadata,
   groupArtifacts,
   collectGit,
-  collectPlatform,
+  collectWorkflow,
+  collectRuntime,
   renderStatus,
   type Runner,
   type StatusModel
@@ -24,8 +28,7 @@ test('collectMetadata emits the fixed key order and degrades missing fields to -
     status: 'active',
     current_step: 'code',
     priority: 'High',
-    branch: 'feat',
-    issue_number: '468'
+    branch: 'feat'
   });
   assert.deepEqual(rows, [
     ['type', 'feature'],
@@ -36,9 +39,7 @@ test('collectMetadata emits the fixed key order and degrades missing fields to -
     ['branch', 'feat'],
     ['assigned_to', '-'],
     ['created_at', '-'],
-    ['updated_at', '-'],
-    ['issue_number', '468'],
-    ['pr_status', '-']
+    ['updated_at', '-']
   ]);
 });
 
@@ -135,58 +136,119 @@ test('collectGit isolates a single failing field (rev-list) without degrading th
   assert.equal(git.exists, 'yes');
 });
 
-// --- collectPlatform -------------------------------------------------------
+// --- collectWorkflow -------------------------------------------------------
 
-test('collectPlatform makes no calls when there is no issue and pr is not created', () => {
-  let calls = 0;
-  const run: Runner = () => {
-    calls += 1;
-    throw new Error('should not be called');
-  };
-  const platform = collectPlatform({}, run);
-  assert.equal(platform.issue, '-');
-  assert.equal(platform.pr, '-');
-  assert.equal(calls, 0);
+function taskWithLog(entries: string[]): string {
+  return ['# Task', '', '## 活动日志', '', ...entries, '', '## 完成检查清单'].join('\n');
+}
+
+test('collectWorkflow reports the latest started-only row as in-progress', () => {
+  const workflow = collectWorkflow(
+    taskWithLog([
+      '- 2026-07-02 20:00:00+08:00 — **Code Task (Round 2) [started]** by codex — started'
+    ]),
+    new Date('2026-07-02T12:30:00Z')
+  );
+  assert.equal(workflow.state, 'in-progress');
+  assert.equal(workflow.step, 'Code Task (Round 2)');
+  assert.equal(workflow.agent, 'codex');
+  assert.equal(workflow.startedAt, '2026-07-02 20:00:00+08:00');
+  assert.equal(workflow.doneAt, '-');
+  assert.equal(workflow.stale, 'no');
 });
 
-test('collectPlatform skips the PR call when pr_status is created but pr_number is absent', () => {
-  let calls = 0;
-  const run: Runner = () => {
-    calls += 1;
-    throw new Error('should not be called');
-  };
-  const platform = collectPlatform({ pr_status: 'created' }, run);
-  assert.equal(platform.pr, '-');
-  assert.equal(calls, 0);
+test('collectWorkflow reports paired completion as idle', () => {
+  const workflow = collectWorkflow(
+    taskWithLog([
+      '- 2026-07-02 20:00:00+08:00 — **Plan Task (Round 3) [started]** by codex — started',
+      '- 2026-07-02 20:05:00+08:00 — **Plan Task (Round 3)** by codex — Plan completed → plan-r3.md'
+    ]),
+    new Date('2026-07-02T12:30:00Z')
+  );
+  assert.equal(workflow.state, 'idle');
+  assert.equal(workflow.doneAt, '2026-07-02 20:05:00+08:00');
+  assert.equal(workflow.stale, '-');
 });
 
-test('collectPlatform summarizes gh JSON for issue and pr', () => {
-  const run: Runner = (_file, args) => {
-    if (args[0] === 'issue') {
-      return JSON.stringify({ state: 'OPEN', labels: [{ name: 'in: cli' }, { name: 'type: feature' }] });
-    }
-    if (args[0] === 'pr') {
-      return JSON.stringify({
-        state: 'OPEN',
-        statusCheckRollup: [{ conclusion: 'SUCCESS' }, { conclusion: 'FAILURE' }]
-      });
-    }
-    throw new Error(`unexpected gh ${args.join(' ')}`);
+test('collectWorkflow marks in-progress rows stale after 60 minutes', () => {
+  const workflow = collectWorkflow(
+    taskWithLog([
+      '- 2026-07-02 19:00:00+08:00 — **Code Task (Round 2) [started]** by codex — started'
+    ]),
+    new Date('2026-07-02T12:01:00Z')
+  );
+  assert.equal(workflow.state, 'in-progress');
+  assert.equal(workflow.stale, 'yes');
+});
+
+// --- collectRuntime --------------------------------------------------------
+
+test('collectRuntime reports unmanaged when workflow is in-progress without a run record', () => {
+  const taskDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-status-runtime-'));
+  const runtime = collectRuntime(
+    taskDir,
+    {
+      state: 'in-progress',
+      step: 'Code Task (Round 2)',
+      agent: 'codex',
+      startedAt: '2026-07-02 20:00:00+08:00',
+      doneAt: '-',
+      stale: 'no'
+    },
+    throwingRun
+  );
+  assert.equal(runtime.mode, 'unmanaged');
+  assert.equal(runtime.status, 'inferred-from-workflow');
+});
+
+test('collectRuntime reads the latest managed tmux run through docker exec', () => {
+  const taskDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-status-runtime-'));
+  const runsDir = path.join(taskDir, 'runs');
+  fs.mkdirSync(runsDir);
+  fs.writeFileSync(
+    path.join(runsDir, 'run-test.json'),
+    JSON.stringify({
+      version: 1,
+      run_id: 'run-test',
+      engine: 'docker',
+      container: 'agent-dev',
+      run_dir: '/tmp/agent-infra-runs/run-test',
+      status_file: '/tmp/agent-infra-runs/run-test/status',
+      log_file: '/tmp/agent-infra-runs/run-test/output.log'
+    }),
+    'utf8'
+  );
+
+  const files = new Map([
+    ['/tmp/agent-infra-runs/run-test/status', 'running\n'],
+    ['/tmp/agent-infra-runs/run-test/session', 'work\n'],
+    ['/tmp/agent-infra-runs/run-test/window', 'ai-test\n'],
+    ['/tmp/agent-infra-runs/run-test/pane', '%12\n'],
+    ['/tmp/agent-infra-runs/run-test/started_at', '2026-07-02 20:00:00+08:00\n'],
+    ['/tmp/agent-infra-runs/run-test/finished_at', ''],
+    ['/tmp/agent-infra-runs/run-test/exit_code', '']
+  ]);
+  const run: Runner = (file, args) => {
+    assert.equal(file, 'docker');
+    assert.deepEqual(args.slice(0, 3), ['exec', 'agent-dev', 'cat']);
+    const value = files.get(args[3] ?? '');
+    if (value === undefined) throw new Error(`missing file ${args[3]}`);
+    return value;
   };
-  const platform = collectPlatform(
-    { issue_number: '468', pr_status: 'created', pr_number: '42' },
+
+  const runtime = collectRuntime(
+    taskDir,
+    { state: 'idle', step: '-', agent: '-', startedAt: '-', doneAt: '-', stale: '-' },
     run
   );
-  assert.equal(platform.issue, 'OPEN [in: cli, type: feature]');
-  assert.equal(platform.pr, 'OPEN, checks: 1/2');
-});
-
-test('collectPlatform degrades to - when gh fails (offline)', () => {
-  const run: Runner = () => {
-    throw new Error('gh: offline');
-  };
-  const platform = collectPlatform({ issue_number: '468' }, run);
-  assert.equal(platform.issue, '-');
+  assert.equal(runtime.mode, 'managed-tmux');
+  assert.equal(runtime.status, 'running');
+  assert.equal(runtime.run, 'run-test');
+  assert.equal(runtime.tmux, 'work:ai-test:%12');
+  assert.equal(runtime.startedAt, '2026-07-02 20:00:00+08:00');
+  assert.equal(runtime.finishedAt, '-');
+  assert.equal(runtime.exitCode, '-');
+  assert.equal(runtime.log, '/tmp/agent-infra-runs/run-test/output.log');
 });
 
 // --- renderStatus ----------------------------------------------------------
@@ -195,7 +257,6 @@ const baseModel: StatusModel = {
   taskId: 'TASK-20260101-000001',
   shortId: '#01',
   title: 'demo title',
-  issueNumber: '468',
   metadata: [
     ['type', 'feature'],
     ['status', 'active']
@@ -207,6 +268,24 @@ const baseModel: StatusModel = {
       { stage: 'plan', files: ['plan.md', 'plan-r2.md'] }
     ]
   },
+  workflow: {
+    state: 'in-progress',
+    step: 'Code Task (Round 2)',
+    agent: 'codex',
+    startedAt: '2026-07-02 20:00:00+08:00',
+    doneAt: '-',
+    stale: 'no'
+  },
+  runtime: {
+    mode: 'managed-tmux',
+    status: 'running',
+    run: 'run-test',
+    tmux: 'work:ai-test:%12',
+    startedAt: '2026-07-02 20:00:00+08:00',
+    finishedAt: '-',
+    exitCode: '-',
+    log: '/tmp/agent-infra-runs/run-test/output.log'
+  },
   git: {
     current: 'feat',
     frontmatter: 'feat',
@@ -215,21 +294,21 @@ const baseModel: StatusModel = {
     uncommitted: 'clean',
     aheadBehind: '-'
   },
-  platform: { issue: 'OPEN', pr: '-' }
 };
 
-test('renderStatus emits all five sections with aligned rows', () => {
+test('renderStatus emits workflow and runtime before git', () => {
   const out = renderStatus(baseModel).join('\n');
   assert.match(out, /^Task TASK-20260101-000001  \(#01\)$/m);
   assert.match(out, /^demo title$/m);
   assert.match(out, /^Metadata$/m);
   assert.match(out, /^Artifacts \(2\)$/m);
+  assert.match(out, /^Workflow$/m);
+  assert.match(out, /^  state +in-progress$/m);
+  assert.match(out, /^Runtime$/m);
+  assert.match(out, /^  mode +managed-tmux$/m);
   assert.match(out, /^Git$/m);
-  assert.match(out, /^Platform$/m);
   // Stage group renders its files joined, in order.
   assert.match(out, /^  plan +plan\.md, plan-r2\.md$/m);
-  // Platform issue row is labeled with the issue number.
-  assert.match(out, /^  issue #468 +OPEN$/m);
 });
 
 test('renderStatus shows (none) when a task has no artifacts', () => {
