@@ -88,7 +88,7 @@ test("package metadata supports scoped npm publishing", () => {
   assert.match(pkg.scripts.prepublishOnly, /tests\/\*\*\/\*\.test\.ts/);
 });
 
-test("Node baseline stays aligned across metadata and automation", () => {
+test("Node runtime baseline and release publisher baseline stay pinned", () => {
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json")) as PackageLock;
 
@@ -110,7 +110,7 @@ test("Node baseline stays aligned across metadata and automation", () => {
   const releaseSteps = releaseWorkflow.jobs?.["npm-publish"]?.steps ?? [];
   const setupNodeStep = releaseSteps.find((step) => step.uses === "actions/setup-node@v6");
   assert.ok(setupNodeStep, "actions/setup-node@v6 step not found in release workflow");
-  assert.equal(String(setupNodeStep?.with?.["node-version"]), "22");
+  assert.equal(String(setupNodeStep?.with?.["node-version"]), "24");
 
   const dependabot = parse(read(".github/dependabot.yml")) as DependabotConfig;
   const npmUpdates = dependabot.updates?.find(
