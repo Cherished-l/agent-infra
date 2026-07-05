@@ -68,6 +68,8 @@ Put the app credentials in `.agents/server.local.json`. This file is git-ignored
 | `/sandbox ls`, `/sandbox show <ref>`, `/sandbox vm status` | `read` | `ai sandbox ...` |
 | `/task decisions <ref>`, `/task log <ref>`, `/task ls`, `/task show <ref>`, `/task status <ref>` | `read` | `ai task ...` |
 
+The Feishu adapter returns command results as `interactive` cards by default; this is the default output surface selected after the mobile demo validation. Other adapters are not affected.
+
 `/task` commands are read-only views. Lifecycle progress goes through `/run`. Task skills resolve `<task-ref>` to the task branch, find the matching sandbox, and fail with an instruction to run `ai sandbox create <task-ref>` if no sandbox exists. `create-task` is the only v1 skill runner that does not require an existing task or sandbox. Sandbox removal is intentionally not exposed through IM because local deletion still requires interactive confirmation.
 
 The bridge intentionally exposes the v1 allow-list above, not every local `ai task` or `ai sandbox` subcommand. `/run <skill>` accepts the built-in lifecycle skill allow-list from `ai run`; `command.allowedSkills` can narrow that list per deployment. All rows in the table have local equivalents, so verify the local path first with `ai decide ...`, `ai run ...`, `ai sandbox ...`, and `ai task ...`; task-state `ai run` commands require a matching sandbox and the selected TUI installed. After local verification passes, test the same command allow-list through Feishu. Destructive or arbitrary execution commands such as `/sandbox rm` and `/sandbox exec` are intentionally not implemented for IM.

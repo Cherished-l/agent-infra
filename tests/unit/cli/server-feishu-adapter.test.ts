@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import feishuFactory, { createFeishuAdapter } from '../../../lib/server/adapters/feishu/index.ts';
-import { createFeishuTransport, normalizeMessage } from '../../../lib/server/adapters/feishu/transport.ts';
-import type { FeishuTransport } from '../../../lib/server/adapters/feishu/transport.ts';
+import {
+  cardMessage,
+  cleanFeishuText,
+  createFeishuTransport,
+  normalizeMessage,
+  toFeishuCreateData
+} from '../../../lib/server/adapters/feishu/transport.ts';
+import type { FeishuOutgoingMessage, FeishuTransport } from '../../../lib/server/adapters/feishu/transport.ts';
 import type { AdapterCtx, InboundMessage } from '../../../lib/server/adapters/_contract.ts';
 
 // Build an im.message.receive_v1 event the way the SDK delivers it: content is a
@@ -49,11 +55,11 @@ test('normalizeMessage throws when content is not JSON', () => {
 // without the SDK.
 function fakeTransport(): {
   transport: FeishuTransport;
-  sends: Array<{ chatId: string; text: string }>;
+  sends: Array<{ chatId: string; message: FeishuOutgoingMessage }>;
   fire: (raw: unknown) => Promise<void>;
   stopped: () => boolean;
 } {
-  const sends: Array<{ chatId: string; text: string }> = [];
+  const sends: Array<{ chatId: string; message: FeishuOutgoingMessage }> = [];
   let onMessage: ((raw: unknown) => Promise<void>) | null = null;
   let stopped = false;
   return {
@@ -70,8 +76,8 @@ function fakeTransport(): {
       stop: async () => {
         stopped = true;
       },
-      send: async (chatId, text) => {
-        sends.push({ chatId, text });
+      send: async (chatId, message) => {
+        sends.push({ chatId, message });
       }
     }
   };
@@ -94,7 +100,7 @@ function makeCtx(dispatched: InboundMessage[]): AdapterCtx {
   };
 }
 
-test('an inbound /ping dispatches a normalized message and reply routes to send', async () => {
+test('an inbound /ping dispatches a normalized message and reply routes a card to send', async () => {
   const fake = fakeTransport();
   const dispatched: InboundMessage[] = [];
   const adapter = createFeishuAdapter({ appId: 'x' }, fake.transport);
@@ -107,7 +113,26 @@ test('an inbound /ping dispatches a normalized message and reply routes to send'
   assert.equal(dispatched[0]?.adapter, 'feishu');
 
   await dispatched[0]?.reply('pong v9.9.9');
-  assert.deepEqual(fake.sends, [{ chatId: 'oc_chat', text: 'pong v9.9.9' }]);
+  assert.deepEqual(fake.sends, [
+    { chatId: 'oc_chat', message: { kind: 'interactive', title: 'agent-infra', text: 'pong v9.9.9' } }
+  ]);
+});
+
+test('a non-ping inbound reply also routes a card to send', async () => {
+  const fake = fakeTransport();
+  const dispatched: InboundMessage[] = [];
+  const adapter = createFeishuAdapter({ appId: 'x' }, fake.transport);
+
+  await adapter.start(makeCtx(dispatched));
+  await fake.fire(receiveEvent('/version'));
+
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0]?.text, '/version');
+
+  await dispatched[0]?.reply('agent-infra v9.9.9');
+  assert.deepEqual(fake.sends, [
+    { chatId: 'oc_chat', message: { kind: 'interactive', title: 'agent-infra', text: 'agent-infra v9.9.9' } }
+  ]);
 });
 
 test('a malformed inbound message is dropped (logged) without dispatching', async () => {
@@ -132,10 +157,26 @@ test('sendMessage and stop delegate to the transport', async () => {
 
   await adapter.start(makeCtx([]));
   await adapter.sendMessage({ chatId: 'oc_target' }, 'hello');
-  assert.deepEqual(fake.sends, [{ chatId: 'oc_target', text: 'hello' }]);
+  assert.deepEqual(fake.sends, [
+    { chatId: 'oc_target', message: { kind: 'interactive', title: 'agent-infra', text: 'hello' } }
+  ]);
 
   await adapter.stop();
   assert.equal(fake.stopped(), true);
+});
+
+test('feishu message helpers strip ANSI and map payloads to create data', () => {
+  assert.equal(cleanFeishuText('\u001b[31mred\u001b[0m\nnext'), 'red\nnext');
+  assert.deepEqual(cardMessage('\u001b[32mok\u001b[0m'), { kind: 'interactive', title: 'agent-infra', text: 'ok' });
+
+  const cardData = toFeishuCreateData('oc_chat', { kind: 'interactive', title: 'Card', text: 'hello' });
+  assert.equal(cardData.receive_id, 'oc_chat');
+  assert.equal(cardData.msg_type, 'interactive');
+  assert.deepEqual(JSON.parse(cardData.content), {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: 'Card' }, template: 'blue' },
+    elements: [{ tag: 'div', text: { tag: 'lark_md', content: 'hello' } }]
+  });
 });
 
 // CD-1: an enabled-but-misconfigured feishu adapter must fail loudly rather than

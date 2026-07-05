@@ -1,4 +1,5 @@
 import * as lark from '@larksuiteoapi/node-sdk';
+import { stripVTControlCharacters } from 'node:util';
 
 // Transport layer for the feishu adapter. All @larksuiteoapi/node-sdk surface is
 // confined here so the adapter body (index.ts) depends only on this narrow
@@ -10,7 +11,15 @@ export type FeishuTransport = {
   // each inbound im.message.receive_v1.
   start: (onMessage: (raw: unknown) => Promise<void>) => Promise<void>;
   stop: () => Promise<void>;
-  send: (chatId: string, text: string) => Promise<void>;
+  send: (chatId: string, message: FeishuOutgoingMessage) => Promise<void>;
+};
+
+export type FeishuOutgoingMessage = { kind: 'interactive'; title: string; text: string };
+
+type FeishuCreateData = {
+  receive_id: string;
+  msg_type: 'interactive';
+  content: string;
 };
 
 export type NormalizedMessage = {
@@ -69,6 +78,26 @@ function resolveDomain(value: unknown): number {
   return value === 'lark' || value === 'Lark' ? lark.Domain.Lark : lark.Domain.Feishu;
 }
 
+export function cleanFeishuText(text: string): string {
+  return stripVTControlCharacters(text).replace(/\r\n/g, '\n');
+}
+
+export function cardMessage(text: string): FeishuOutgoingMessage {
+  return { kind: 'interactive', title: 'agent-infra', text: cleanFeishuText(text) };
+}
+
+export function toFeishuCreateData(chatId: string, message: FeishuOutgoingMessage): FeishuCreateData {
+  return {
+    receive_id: chatId,
+    msg_type: 'interactive',
+    content: JSON.stringify({
+      config: { wide_screen_mode: true },
+      header: { title: { tag: 'plain_text', content: message.title }, template: 'blue' },
+      elements: [{ tag: 'div', text: { tag: 'lark_md', content: message.text } }]
+    })
+  };
+}
+
 // Build the real SDK-backed transport from adapter config. appId/appSecret come
 // from server config (appSecret only via server.local.json / env). The WSClient
 // long connection delivers events; the Client REST call sends replies.
@@ -118,10 +147,10 @@ export function createFeishuTransport(config: Record<string, unknown>): FeishuTr
         // Ignore: the daemon is shutting down regardless.
       }
     },
-    async send(chatId, text) {
+    async send(chatId, message) {
       await client.im.message.create({
         params: { receive_id_type: 'chat_id' },
-        data: { receive_id: chatId, msg_type: 'text', content: JSON.stringify({ text }) }
+        data: toFeishuCreateData(chatId, message)
       });
     }
   };
