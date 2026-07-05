@@ -134,13 +134,13 @@ npm test
 
 ## 测试要求
 
-- 测试框架：Node.js 内置测试运行器（`node:test`，需 Node.js >= 22）
+- 测试框架：Node.js 内置测试运行器（`node:test`，需 Node.js >= 22.9.0）
 - 运行命令：`npm test`
 - 测试覆盖：模板文件完整性、CLI 初始化流程、占位符渲染验证
 
 ### TypeScript 规范
 
-- 项目源码使用 TypeScript 编写，通过 `tsc` 编译到 `dist/` 后发布；运行时要求 Node.js >= 22。开发态可直接 `node --experimental-strip-types ./bin/cli.ts`。
+- 项目源码使用 TypeScript 编写，通过 `tsc` 编译到 `dist/` 后发布；运行时要求 Node.js >= 22.9.0。开发态可直接 `node --experimental-strip-types ./bin/cli.ts`。
 - TypeScript 只使用 erasable syntax：禁止 `enum`、值级 `namespace`、class 参数属性、装饰器、`import =` 和 `export =`。
 - ESM 相对 import 在源码中继续写 `.ts` 后缀，`tsc` 通过 `rewriteRelativeImportExtensions` 输出 `.js` 后缀到 `dist/`。
 

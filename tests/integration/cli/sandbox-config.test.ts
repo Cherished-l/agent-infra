@@ -168,6 +168,7 @@ test("findRuntimeEngineMismatches reports node runtime engine conflicts", async 
     { runtimes: ["node20"], enginesNode: ">=22" }
   ]);
   assert.deepEqual(runtimeEngines.findRuntimeEngineMismatches(["node22"], ">=22"), []);
+  assert.deepEqual(runtimeEngines.findRuntimeEngineMismatches(["node22"], ">=22.9.0"), []);
   assert.deepEqual(runtimeEngines.findRuntimeEngineMismatches(["node20", "node22"], ">=22"), []);
   assert.deepEqual(runtimeEngines.findRuntimeEngineMismatches(["node18", "node20"], ">=22"), [
     { runtimes: ["node18", "node20"], enginesNode: ">=22" }
@@ -189,7 +190,7 @@ test("loadConfig warns when sandbox node runtime does not satisfy package engine
     execSync("git init", { cwd: tmpDir, env: gitSafeEnv(), stdio: "pipe" });
     fs.writeFileSync(
       path.join(tmpDir, "package.json"),
-      JSON.stringify({ engines: { node: ">=22" } }, null, 2) + "\n",
+      JSON.stringify({ engines: { node: ">=22.9.0" } }, null, 2) + "\n",
       "utf8"
     );
     fs.mkdirSync(path.join(tmpDir, ".agents"), { recursive: true });
@@ -209,7 +210,7 @@ test("loadConfig warns when sandbox node runtime does not satisfy package engine
     }));
 
     assert.deepEqual(config.runtimes, ["node20"]);
-    assert.match(stderr.join(""), /sandbox runtimes "node20" do not satisfy this project's package\.json "engines\.node" \(">=22"\)/);
+    assert.match(stderr.join(""), /sandbox runtimes "node20" do not satisfy this project's package\.json "engines\.node" \(">=22\.9\.0"\)/);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -226,7 +227,7 @@ test("loadConfig does not warn when sandbox node runtime satisfies package engin
     execSync("git init", { cwd: tmpDir, env: gitSafeEnv(), stdio: "pipe" });
     fs.writeFileSync(
       path.join(tmpDir, "package.json"),
-      JSON.stringify({ engines: { node: ">=22" } }, null, 2) + "\n",
+      JSON.stringify({ engines: { node: ">=22.9.0" } }, null, 2) + "\n",
       "utf8"
     );
     fs.mkdirSync(path.join(tmpDir, ".agents"), { recursive: true });
@@ -294,7 +295,7 @@ test("loadConfig skips runtime engine warnings when a custom Dockerfile is confi
     execSync("git init", { cwd: tmpDir, env: gitSafeEnv(), stdio: "pipe" });
     fs.writeFileSync(
       path.join(tmpDir, "package.json"),
-      JSON.stringify({ engines: { node: ">=22" } }, null, 2) + "\n",
+      JSON.stringify({ engines: { node: ">=22.9.0" } }, null, 2) + "\n",
       "utf8"
     );
     fs.writeFileSync(path.join(tmpDir, "Dockerfile"), "FROM node:20\n", "utf8");

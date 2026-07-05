@@ -2,7 +2,7 @@
 
 [← Back to README](../../README.md) · [中文](../zh-CN/platform-support.md)
 
-agent-infra runs on macOS, Linux, and Windows. The CLI itself only needs Node.js (>=22); container-related features (`ai sandbox *`) additionally need Docker.
+agent-infra runs on macOS, Linux, and Windows. The CLI itself only needs Node.js (>=22.9.0); container-related features (`ai sandbox *`) additionally need Docker.
 
 ## Sandbox engine selection
 
@@ -123,7 +123,7 @@ These configurations are not actively tested in this release:
 
 ## Windows
 
-- `ai init`, `ai sync`, etc.: should work after `npm install -g @fitlab-ai/agent-infra` (Node.js >= 22). Not actively tested in this release.
+- `ai init`, `ai sync`, etc.: should work after `npm install -g @fitlab-ai/agent-infra` (Node.js >= 22.9.0). Not actively tested in this release.
 - `ai sandbox *`: supported on Windows via WSL2 + Docker Desktop.
 
 Before running `ai sandbox create`, install Windows 11 with WSL2, configure a default Linux distribution, install Docker Desktop, and enable Docker Desktop's WSL integration for that distribution.

@@ -2,7 +2,7 @@
 
 [← 返回 README](../../README.zh-CN.md) · [English](../en/platform-support.md)
 
-agent-infra 支持 macOS、Linux 和 Windows。CLI 本身只需要 Node.js (>=22)；容器相关功能（`ai sandbox *`）额外需要 Docker。
+agent-infra 支持 macOS、Linux 和 Windows。CLI 本身只需要 Node.js (>=22.9.0)；容器相关功能（`ai sandbox *`）额外需要 Docker。
 
 ## 沙箱引擎选择
 
@@ -123,7 +123,7 @@ Rootless 模式的已知差异：
 
 ## Windows
 
-- `ai init`、`ai sync` 等：执行 `npm install -g @fitlab-ai/agent-infra` 后理论上可用（需 Node.js >= 22）。本期未做主动验证。
+- `ai init`、`ai sync` 等：执行 `npm install -g @fitlab-ai/agent-infra` 后理论上可用（需 Node.js >= 22.9.0）。本期未做主动验证。
 - `ai sandbox *`：Windows 通过 WSL2 + Docker Desktop 支持。
 
 运行 `ai sandbox create` 前，请先准备 Windows 11、WSL2、默认 Linux distribution、Docker Desktop，并在 Docker Desktop 中为该 distribution 启用 WSL integration。

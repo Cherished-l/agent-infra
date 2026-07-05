@@ -93,8 +93,10 @@ test("Node runtime baseline and release publisher baseline stay pinned", () => {
   const lock = JSON.parse(read("package-lock.json")) as PackageLock;
 
   const engineRange = pkg.engines.node;
-  assert.equal(requireMinVersion(engineRange, "package engines.node").major, 22);
-  assert.equal(semver.satisfies("21.999.0", engineRange), false);
+  assert.equal(requireMinVersion(engineRange, "package engines.node").version, "22.9.0");
+  assert.equal(lock.packages[""]?.engines?.node, engineRange);
+  assert.equal(semver.satisfies("22.8.999", engineRange), false);
+  assert.equal(semver.satisfies("22.9.0", engineRange), true);
 
   const typesNodeRange = pkg.devDependencies["@types/node"];
   assert.equal(requireMinVersion(typesNodeRange, "package @types/node range").major, 22);
@@ -112,6 +114,12 @@ test("Node runtime baseline and release publisher baseline stay pinned", () => {
   assert.ok(setupNodeStep, "actions/setup-node@v6 step not found in release workflow");
   assert.equal(String(setupNodeStep?.with?.["node-version"]), "24");
 
+  const unitTestsWorkflow = parse(read(".github/workflows/unit-tests.yml")) as ReleaseWorkflow;
+  const minimumBaselineSteps = unitTestsWorkflow.jobs?.["minimum-node-baseline"]?.steps ?? [];
+  const minimumSetupNodeStep = minimumBaselineSteps.find((step) => step.uses === "actions/setup-node@v6");
+  assert.ok(minimumSetupNodeStep, "minimum Node baseline setup-node step not found");
+  assert.equal(String(minimumSetupNodeStep?.with?.["node-version"]), "22.9.0");
+
   const dependabot = parse(read(".github/dependabot.yml")) as DependabotConfig;
   const npmUpdates = dependabot.updates?.find(
     (update) => update["package-ecosystem"] === "npm" && update.directory === "/"
@@ -126,7 +134,7 @@ test("Node runtime baseline and release publisher baseline stay pinned", () => {
 
   const runtimeEngineConflicts = Object.entries(lock.packages)
     .filter(([packagePath, meta]) => packagePath !== "" && !meta.dev && meta.engines?.node)
-    .filter(([, meta]) => !semver.intersects(meta.engines?.node ?? "", ">=22 <23"))
+    .filter(([, meta]) => !semver.intersects(meta.engines?.node ?? "", ">=22.9.0 <23"))
     .map(([packagePath, meta]) => [packagePath, meta.engines?.node]);
   assert.deepEqual(runtimeEngineConflicts, []);
 });

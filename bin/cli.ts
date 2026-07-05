@@ -2,10 +2,10 @@
 import { VERSION } from '../lib/version.ts';
 
 // Node.js version check
-const [major = 0] = process.versions.node.split('.').map((part) => parseInt(part, 10));
-if (major < 22) {
+const [major = 0, minor = 0] = process.versions.node.split('.').map((part) => parseInt(part, 10));
+if (major < 22 || (major === 22 && minor < 9)) {
   process.stderr.write(
-    `agent-infra requires Node.js >= 22 (current: ${process.version})\n`
+    `agent-infra requires Node.js >= 22.9.0 (current: ${process.version})\n`
   );
   process.exit(1);
 }

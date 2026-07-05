@@ -71,3 +71,47 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.lcov
           fail_ci_if_error: false
+
+  minimum-node-baseline:
+    name: ubuntu-latest / Node 22.9.0 minimum baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.9.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Pack tarball
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP" >/dev/null
+          TARBALL=$(ls "$RUNNER_TEMP"/fitlab-ai-agent-infra-*.tgz)
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+
+      - name: Smoke - install and run
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SMOKE_DIR="$RUNNER_TEMP/agent-infra-min-node-smoke"
+          mkdir -p "$SMOKE_DIR"
+          cd "$SMOKE_DIR"
+          npm init -y >/dev/null
+          npm install "$TARBALL"
+          ./node_modules/.bin/agent-infra version

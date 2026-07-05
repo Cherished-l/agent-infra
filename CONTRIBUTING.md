@@ -21,7 +21,7 @@ We use [Git](https://git-scm.com/) for version control, and the project follows 
 ### Prerequisites
 
 - Git
-- Node.js >= 22 (for the built-in test runner `node:test`)
+- Node.js >= 22.9.0 (for the built-in test runner `node:test`)
 - A shell (sh/bash/zsh)
 
 ### Quick Start
@@ -157,7 +157,7 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 ## Testing
 
-- Test framework: Node.js built-in test runner (`node:test`, requires Node.js >= 22)
+- Test framework: Node.js built-in test runner (`node:test`, requires Node.js >= 22.9.0)
 - Build command: `npm run build` (required after modifying `src/`, `lib/defaults.json`, or version information)
 - Run command: `npm test`
 - Equivalent to: `node scripts/build-inline.js --check && node --test tests/*.test.js`
