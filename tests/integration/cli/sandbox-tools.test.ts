@@ -665,18 +665,43 @@ test("gemini-cli tool preseeds host settings for model and thinking config inher
   )));
 });
 
+test("agent-infra tool exposes the ai CLI without credentials or tmpfs state", async () => {
+  const sandboxTools = await loadFreshEsm<typeof import("../../../lib/sandbox/tools.ts")>("lib/sandbox/tools.js");
+  const [maybeTool] = sandboxTools.resolveTools({
+    home: "/home/host-user",
+    project: "demo",
+    tools: ["agent-infra"]
+  });
+
+  const tool = required(maybeTool);
+  assert.equal(tool.id, "agent-infra");
+  assert.equal(tool.install.type, "npm");
+  assert.equal(tool.install.cmd, "@fitlab-ai/agent-infra@latest");
+  assert.equal(tool.sandboxBase, "/home/host-user/.agent-infra/sandboxes/agent-infra");
+  assert.equal(tool.containerMount, "/home/devuser/.agent-infra-cli");
+  assert.equal(tool.versionCmd, "ai version --raw");
+  assert.equal(tool.tmpfs, undefined);
+  assert.equal(tool.hostLiveMounts, undefined);
+  assert.equal(tool.hostPreSeedFiles, undefined);
+  assert.equal(tool.hostPreSeedDirs, undefined);
+});
+
 test("resolveTools consolidates sandbox bases under ~/.agent-infra", async () => {
   const sandboxTools = await loadFreshEsm<typeof import("../../../lib/sandbox/tools.ts")>("lib/sandbox/tools.js");
   const tools = sandboxTools.resolveTools({
     home: "/home/host-user",
     project: "demo",
-    tools: ["claude-code", "codex", "opencode", "gemini-cli"]
+    tools: ["agent-infra", "claude-code", "codex", "gemini-cli", "opencode"]
   });
 
   assert.deepEqual(tools.map((tool) => ({
     id: tool.id,
     sandboxBase: tool.sandboxBase
   })), [
+    {
+      id: "agent-infra",
+      sandboxBase: "/home/host-user/.agent-infra/sandboxes/agent-infra"
+    },
     {
       id: "claude-code",
       sandboxBase: "/home/host-user/.agent-infra/sandboxes/claude-code"
@@ -686,12 +711,12 @@ test("resolveTools consolidates sandbox bases under ~/.agent-infra", async () =>
       sandboxBase: "/home/host-user/.agent-infra/sandboxes/codex"
     },
     {
-      id: "opencode",
-      sandboxBase: "/home/host-user/.agent-infra/sandboxes/opencode"
-    },
-    {
       id: "gemini-cli",
       sandboxBase: "/home/host-user/.agent-infra/sandboxes/gemini-cli"
+    },
+    {
+      id: "opencode",
+      sandboxBase: "/home/host-user/.agent-infra/sandboxes/opencode"
     }
   ]);
 });

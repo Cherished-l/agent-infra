@@ -13,6 +13,7 @@
       "node22"
     ],
     "tools": [
+      "agent-infra",
       "claude-code",
       "codex",
       "gemini-cli",
