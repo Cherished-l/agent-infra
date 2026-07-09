@@ -176,6 +176,22 @@ test("release documentation reflects CI-driven npm publishing", () => {
   });
 });
 
+test("project release skill runs local entropy-check without distributing it", () => {
+  const releaseSkill = read(".agents/skills/release/SKILL.md");
+
+  assert.match(releaseSkill, /entropy-check/);
+  [
+    "templates/.agents/skills/release/SKILL.en.md",
+    "templates/.agents/skills/release/SKILL.zh-CN.md"
+  ].forEach((relativePath) => {
+    assert.doesNotMatch(
+      read(relativePath),
+      /entropy-check/,
+      `${relativePath} should not require the project-local entropy-check skill`
+    );
+  });
+});
+
 test("post-release-smoke workflow verifies npm and brew install channels", () => {
   const workflow = read(".github/workflows/post-release-smoke.yml");
 
