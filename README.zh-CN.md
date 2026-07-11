@@ -207,3 +207,13 @@ my-project/
 ## 许可协议
 
 [MIT](License.txt)
+
+## 社区
+
+- 微信公众号：`FitFramework`
+- QQ 技术交流群：`1029802553`
+
+<p align="center">
+  <img src="./assets/qrcode_for_wechat_gh.png" alt="FitFramework 微信公众号二维码" width="250">
+  <img src="./assets/qrcode_for_qq_01.png" alt="FitFramework QQ 技术交流群二维码" width="250">
+</p>
