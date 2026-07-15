@@ -75,6 +75,7 @@ for (const pattern of mergedAbsent) {
 }
 
 const managedPresent = [
+  ".git-hooks/check-large-files.cjs",
   ".git-hooks/check-version-format.sh",
   ".agents/scripts/",
   ".agents/hooks/",

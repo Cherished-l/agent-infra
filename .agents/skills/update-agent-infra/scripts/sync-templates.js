@@ -69,6 +69,7 @@ const DEFAULTS = {
       ".claude/commands/",
       ".codex/hooks.json",
       ".gemini/commands/",
+      ".git-hooks/check-large-files.cjs",
       ".git-hooks/check-version-format.sh",
       ".github/scripts/",
       ".github/workflows/metadata-sync.yml",

@@ -91,6 +91,7 @@ test("required template files were migrated into templates/", () => {
     "templates/.agents/scripts/validate-artifact.js",
     "templates/.agents/scripts/workflow-warnings.js",
     "templates/.agents/scripts/lib/review-artifacts.js",
+    "templates/.git-hooks/check-large-files.cjs",
     "templates/.git-hooks/check-version-format.sh",
     "templates/.git-hooks/pre-commit",
     "templates/.agents/hooks/check-version-format.sh",
@@ -236,6 +237,7 @@ test("update-agent-infra template copies stay in sync with working files", () =>
     [".agents/workflows/feature-development.yaml", "templates/.agents/workflows/feature-development.en.yaml"],
     [".agents/workflows/bug-fix.yaml", "templates/.agents/workflows/bug-fix.en.yaml"],
     [".agents/workflows/refactoring.yaml", "templates/.agents/workflows/refactoring.en.yaml"],
+    [".git-hooks/check-large-files.cjs", "templates/.git-hooks/check-large-files.cjs"],
     [".git-hooks/check-version-format.sh", "templates/.git-hooks/check-version-format.sh"],
     [".agents/hooks/check-version-format.sh", "templates/.agents/hooks/check-version-format.sh"],
     [".agents/hooks/auto-resume.sh", "templates/.agents/hooks/auto-resume.sh"],
@@ -337,6 +339,8 @@ test("version format validation hooks are wired into templates and local config"
   const templateCodexHooks = JSON.parse(read("templates/.codex/hooks.json"));
   const localCheckScript = read(".git-hooks/check-version-format.sh");
   const templateCheckScript = read("templates/.git-hooks/check-version-format.sh");
+  const localLargeFileCheck = read(".git-hooks/check-large-files.cjs");
+  const templateLargeFileCheck = read("templates/.git-hooks/check-large-files.cjs");
   const localAiHook = read(".agents/hooks/check-version-format.sh");
   const templateAiHook = read("templates/.agents/hooks/check-version-format.sh");
   const localPreCommit = read(".git-hooks/pre-commit");
@@ -356,6 +360,11 @@ test("version format validation hooks are wired into templates and local config"
     /^v\d+\.\d+\.\d+$/,
     ".agents/.airc.json templateVersion should be a v-prefixed released semver"
   );
+
+  assert.equal(templateLargeFileCheck, localLargeFileCheck);
+  assert.match(localLargeFileCheck, /1024 \* 1024/, "the large-file limit should be 1 MiB");
+  assert.match(localLargeFileCheck, /diff.*--cached/s, "the large-file check should inspect staged changes");
+  assert.match(localLargeFileCheck, /\.git-large-file-allowlist/, "the large-file check should support explicit exceptions");
 
   ([
     [".git-hooks/check-version-format.sh", localCheckScript],
@@ -386,6 +395,7 @@ test("version format validation hooks are wired into templates and local config"
   ] as Array<[string, string]>).forEach(([relativePath, content]) => {
     assert.match(content, /check-utf8-encoding\.sh/, `${relativePath} should run the UTF-8 validation hook`);
     assert.match(content, /check-version-format\.sh/, `${relativePath} should run the version format validation hook`);
+    assert.match(content, /check-large-files\.cjs/, `${relativePath} should run the large-file validation hook`);
     assert.match(content, /^npm run test:core$/m, `${relativePath} should run the project's core test layer`);
     assert.doesNotMatch(content, /\.github\/hooks\//, `${relativePath} should not delegate back to legacy github hook paths`);
   });
@@ -394,6 +404,7 @@ test("version format validation hooks are wired into templates and local config"
     ["templates/.git-hooks/pre-commit", templatePreCommit]
   ] as Array<[string, string]>).forEach(([relativePath, content]) => {
     assert.match(content, /check-version-format\.sh/, `${relativePath} should run the version format validation hook`);
+    assert.match(content, /check-large-files\.cjs/, `${relativePath} should run the large-file validation hook`);
     assert.doesNotMatch(content, /check-utf8-encoding\.sh/, `${relativePath} should not run the UTF-8 validation hook`);
   });
 

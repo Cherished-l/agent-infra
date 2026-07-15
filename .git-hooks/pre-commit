@@ -7,6 +7,7 @@ script_dir=$(
 
 "$script_dir/check-utf8-encoding.sh"
 "$script_dir/check-version-format.sh"
+node "$script_dir/check-large-files.cjs"
 
 # Fail fast on TypeScript errors before paying for the test suite (~1s warm).
 # typecheck covers tests/ + scripts/ which the production `build` step skips.
