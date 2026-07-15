@@ -48,16 +48,34 @@ function required<T>(value: T | undefined, message = "expected value"): T {
   return value;
 }
 
+// Host proxy env vars leak into gitSafeEnv() via process.env and would
+// pollute tests that assert exact proxy inheritance behaviour. Strip them
+// from the base environment so the test owns every proxy variable.
+const HOST_PROXY_KEYS_TO_CLEAR = [
+  "http_proxy",
+  "HTTP_PROXY",
+  "https_proxy",
+  "HTTPS_PROXY",
+  "all_proxy",
+  "ALL_PROXY",
+  "no_proxy",
+  "NO_PROXY"
+];
+
 function spawnSandboxCli(
   fixture: ReturnType<typeof writeSandboxEngineFixture>,
   tmpDir: string,
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {}
 ) {
+  const baseEnv = envWithPrependedPath(gitSafeEnv(), fixture.binDir);
+  for (const key of HOST_PROXY_KEYS_TO_CLEAR) {
+    delete baseEnv[key];
+  }
   return spawnSync(process.execPath, cliArgs("sandbox", ...args), {
     cwd: fixture.repoDir,
     env: {
-      ...envWithPrependedPath(gitSafeEnv(), fixture.binDir),
+      ...baseEnv,
       HOME: tmpDir,
       USERPROFILE: tmpDir,
       DOCKER_LOG_PATH: fixture.logPath,
