@@ -18,6 +18,9 @@ node_modules/
 *.tsbuildinfo
 dist/
 
+# OpenCode runtime
+.opencode/bun.lock
+
 # OS files
 .DS_Store
 Thumbs.db
