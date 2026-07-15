@@ -4,9 +4,10 @@ import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { pathToFileURL } from "node:url";
 
-import { loadFreshEsm, supportsPosixModeBits } from "../../helpers.ts";
-import type { SyncTemplatesModule } from "../../helpers.ts";
+import { loadFreshEsm, read, supportsPosixModeBits } from "../../helpers.ts";
+import type { PlatformSyncModule, SyncTemplatesModule } from "../../helpers.ts";
 
 function writeFile(root: string, relativePath: string, content: string) {
   const fullPath = path.join(root, relativePath);
@@ -31,6 +32,11 @@ function createTemplateInstall(tmpDir: string, version: string = "0.0.0-test") {
     name: "@fitlab-ai/agent-infra",
     version
   });
+  writeFile(
+    installRoot,
+    "runtime/platform-adapters/platform-sync.github.js",
+    "export const getDefaults = () => ({ statusLabels: { inProgress: 'status: in-progress' }, markers: { task: '<!-- sync-issue:{task-id}:task -->' } });\n"
+  );
 
   return { installRoot, templateRoot };
 }
@@ -62,6 +68,7 @@ test("syncTemplates resolves template roots via PATH lookup and removes legacy t
       name: "@fitlab-ai/agent-infra",
       version: "0.0.0-test"
     });
+    writeFile(installRoot, "runtime/platform-adapters/platform-sync.github.js", "export {};\n");
     // Fixture for a previously installed global CLI; unrelated to this repo's bin/cli.ts.
     writeFile(installRoot, "bin/cli.js", "console.log('ai');\n");
 
@@ -169,6 +176,7 @@ test("syncTemplates resolves Windows npm wrappers via .cmd launchers", async () 
       name: "@fitlab-ai/agent-infra",
       version: "0.0.0-test"
     });
+    writeFile(packageRoot, "runtime/platform-adapters/platform-sync.github.js", "export {};\n");
     writeFile(globalRoot, "ai.cmd", "@ECHO OFF\r\n");
 
     writeJson(projectRoot, ".agents/.airc.json", {
@@ -197,7 +205,7 @@ test("syncTemplates resolves Windows npm wrappers via .cmd launchers", async () 
     const { syncTemplates } = await loadFreshEsm<SyncTemplatesModule>(".agents/skills/update-agent-infra/scripts/sync-templates.js");
     const report = syncTemplates(projectRoot);
 
-    assert.equal(normalize(report.templateRoot), normalize(templateRoot));
+    assert.equal(normalize(report.templateRoot), normalize(fs.realpathSync(templateRoot)));
     assert.equal(fs.readFileSync(path.join(projectRoot, "README.md"), "utf8"), "Hello demo\n");
   } finally {
     childProcess.execSync = originalExecSync;
@@ -281,6 +289,39 @@ test("guarded managed files use persisted three-way baselines", async () => {
       { target, reason: "unknown-origin" }
     ]);
   } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("agent-infra package lookup failure is diagnostic and does not install into the project", async () => {
+  const originalExecSync = childProcess.execSync;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-collab-package-missing-"));
+
+  try {
+    const projectRoot = path.join(tmpDir, "project");
+    fs.mkdirSync(projectRoot, { recursive: true });
+    childProcess.execSync = (() => {
+      throw new Error("command not found");
+    }) as typeof childProcess.execSync;
+
+    const locator = await loadFreshEsm<{
+      resolveAgentInfraPackage(options: object): { packageRoot: string | null; attempts: object[] };
+      formatAgentInfraPackageError(result: object): string;
+    }>(".agents/scripts/lib/agent-infra-package.js");
+    const result = locator.resolveAgentInfraPackage({
+      env: {},
+      platform: "linux",
+      startPath: path.join(projectRoot, ".agents/scripts/lib/agent-infra-package.js")
+    });
+    const message = locator.formatAgentInfraPackageError(result);
+
+    assert.equal(result.packageRoot, null);
+    assert.match(message, /npm install -g @fitlab-ai\/agent-infra/);
+    assert.match(message, /one-time npx/i);
+    assert.equal(fs.existsSync(path.join(projectRoot, "package.json")), false);
+    assert.equal(fs.existsSync(path.join(projectRoot, "node_modules")), false);
+  } finally {
+    childProcess.execSync = originalExecSync;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
@@ -1228,6 +1269,64 @@ test("syncTemplates preserves project testing discipline as a merged file", asyn
     );
     assert.deepEqual(firstReport.managed.written, []);
     assert.deepEqual(secondReport.managed.written, []);
+  } finally {
+    childProcess.execSync = originalExecSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("syncTemplates deploys a loadable GitHub platform adapter without downstream dependencies", async () => {
+  const originalExecSync = childProcess.execSync;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-collab-sync-platform-adapter-"));
+
+  try {
+    const projectRoot = path.join(tmpDir, "project");
+    const { installRoot, templateRoot } = createTemplateInstall(tmpDir);
+    const target = ".agents/scripts/platform-adapters/platform-sync.js";
+    const locatorTarget = ".agents/scripts/lib/agent-infra-package.js";
+
+    fs.mkdirSync(projectRoot, { recursive: true });
+    writeFile(templateRoot, target, read("templates/.agents/scripts/platform-adapters/platform-sync.js"));
+    writeFile(templateRoot, locatorTarget, read("templates/.agents/scripts/lib/agent-infra-package.js"));
+    writeFile(
+      templateRoot,
+      ".agents/scripts/platform-adapters/platform-sync.github.js",
+      read("templates/.agents/scripts/platform-adapters/platform-sync.github.js")
+    );
+    writeJson(projectRoot, ".agents/.airc.json", {
+      project: "demo",
+      org: "acme",
+      language: "en",
+      platform: { type: "github" },
+      files: {
+        managed: [target, locatorTarget],
+        merged: [],
+        ejected: []
+      }
+    });
+
+    childProcess.execSync = (command) => {
+      if (command === "git remote get-url origin") {
+        throw new Error("not a git repo");
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    };
+
+    const { syncTemplates } = await loadFreshEsm<SyncTemplatesModule>(".agents/skills/update-agent-infra/scripts/sync-templates.js");
+    const report = syncTemplates(projectRoot, templateRoot);
+    const deployedPath = path.join(projectRoot, target);
+    const moduleUrl = pathToFileURL(deployedPath);
+    moduleUrl.searchParams.set("v", String(Date.now()));
+    const previousPackageRoot = process.env.AGENT_INFRA_PACKAGE_ROOT;
+    process.env.AGENT_INFRA_PACKAGE_ROOT = installRoot;
+    const { getDefaults } = await import(moduleUrl.href) as PlatformSyncModule;
+    if (previousPackageRoot === undefined) delete process.env.AGENT_INFRA_PACKAGE_ROOT;
+    else process.env.AGENT_INFRA_PACKAGE_ROOT = previousPackageRoot;
+
+    assert.deepEqual(report.managed.created.sort(), [locatorTarget, target].sort());
+    assert.equal(fs.existsSync(path.join(projectRoot, "node_modules")), false);
+    assert.equal(getDefaults().statusLabels.inProgress, "status: in-progress");
+    assert.equal(getDefaults().markers.task, "<!-- sync-issue:{task-id}:task -->");
   } finally {
     childProcess.execSync = originalExecSync;
     fs.rmSync(tmpDir, { recursive: true, force: true });

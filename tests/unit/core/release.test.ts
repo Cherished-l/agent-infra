@@ -72,6 +72,7 @@ test("package metadata supports scoped npm publishing", () => {
     "!dist/**/*.map",
     "bin/cli.ts",
     "lib/",
+    "runtime/",
     "templates/"
   ]);
   assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
@@ -86,6 +87,7 @@ test("package metadata supports scoped npm publishing", () => {
   assert.match(pkg.scripts.prepublishOnly, /npm run build/);
   assert.match(pkg.scripts.prepublishOnly, /--test/);
   assert.match(pkg.scripts.prepublishOnly, /tests\/\*\*\/\*\.test\.ts/);
+  assert.match(read("runtime/platform-adapters/platform-sync.github.js"), /from "cross-spawn"/);
 });
 
 test("Node runtime baseline and release publisher baseline stay pinned", () => {
