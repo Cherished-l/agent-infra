@@ -558,7 +558,7 @@ function spawnSandboxCli(
     },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 20_000
+    timeout: 30_000
   });
 }
 

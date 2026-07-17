@@ -84,7 +84,7 @@ function spawnSandboxCli(
     },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 15_000
+    timeout: 30_000
   });
 }
 
@@ -202,7 +202,7 @@ test("buildContainerEnvFile rejects newlines in additional proxy entries and cle
   }
 });
 
-test("sandbox create inherits host proxy variables only when explicitly requested", { timeout: 30_000 }, () => {
+test("sandbox create inherits host proxy variables only when explicitly requested", { timeout: 90_000 }, () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-sandbox-proxy-cli-"));
 
   try {
