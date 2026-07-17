@@ -74,6 +74,11 @@ test("package metadata supports scoped npm publishing", () => {
     access: "public",
     registry: "https://registry.npmjs.org/"
   });
+  assert.deepEqual(pkg.bin, {
+    "agent-infra": "./dist/bin/cli.js",
+    "ai": "./dist/bin/cli.js",
+    "agent-infra-internal": "./dist/bin/internal-cli.js"
+  });
   assert.deepEqual(pkg.files, [
     "dist/",
     "!dist/**/*.map",

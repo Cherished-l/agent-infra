@@ -162,21 +162,15 @@ const DEFAULT_FILE_SYSTEM: TaskFileSystem = {
 };
 
 function canonicalTimestamp(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZoneName: 'longOffset',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-    .format(new Date())
-    .replace(' GMT', '');
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const offsetMinutes = -now.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+  const offset = Math.abs(offsetMinutes);
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}${offsetSign}${pad(Math.floor(offset / 60))}:${pad(offset % 60)}`;
 }
 
-function defaultMetadataProvider(): TaskWriteMetadata {
+function captureTaskWriteMetadata(): TaskWriteMetadata {
   return { timestamp: canonicalTimestamp(), agentInfraVersion: VERSION };
 }
 
@@ -310,7 +304,7 @@ function writeTask(request: TaskWriteRequest, options: TaskWriteOptions = {}): T
 
   let metadata: TaskWriteMetadata;
   try {
-    metadata = (options.metadataProvider ?? defaultMetadataProvider)();
+    metadata = (options.metadataProvider ?? captureTaskWriteMetadata)();
     if (
       !metadata ||
       typeof metadata.timestamp !== 'string' ||
@@ -431,7 +425,7 @@ function writeTask(request: TaskWriteRequest, options: TaskWriteOptions = {}): T
   return { ...successBase, status: 'applied', changed: true };
 }
 
-export { writeTask };
+export { writeTask, captureTaskWriteMetadata };
 export type {
   FrontmatterMutation,
   SectionMutation,

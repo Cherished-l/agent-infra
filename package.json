@@ -19,7 +19,8 @@
   },
   "bin": {
     "agent-infra": "./dist/bin/cli.js",
-    "ai": "./dist/bin/cli.js"
+    "ai": "./dist/bin/cli.js",
+    "agent-infra-internal": "./dist/bin/internal-cli.js"
   },
   "files": [
     "dist/",

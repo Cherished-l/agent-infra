@@ -2,9 +2,14 @@ import path from "node:path";
 import { filePath } from "./paths.ts";
 
 const CLI_PATH = filePath("dist/bin/cli.js");
+const INTERNAL_CLI_PATH = filePath("dist/bin/internal-cli.js");
 
 function cliArgs(...args: string[]): string[] {
   return [CLI_PATH, ...args];
+}
+
+function internalCliArgs(...args: string[]): string[] {
+  return [INTERNAL_CLI_PATH, ...args];
 }
 
 function pathWithPrependedBin(binDir: string, envPath: string = process.env.PATH || ""): string {
@@ -23,7 +28,9 @@ function envWithPrependedPath(env: NodeJS.ProcessEnv, binDir: string): NodeJS.Pr
 
 export {
   CLI_PATH,
+  INTERNAL_CLI_PATH,
   cliArgs,
+  internalCliArgs,
   envWithPrependedPath,
   pathWithPrependedBin
 };

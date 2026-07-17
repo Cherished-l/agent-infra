@@ -59,6 +59,35 @@ test("all skill doc files have consecutive step numbering", () => {
   });
 });
 
+test("all skill doc nested numbered lists are consecutive", () => {
+  skillDocFiles.forEach((relativePath) => {
+    const activeLists = new Map<number, number>();
+
+    read(relativePath).split("\n").forEach((line, lineIndex) => {
+      const item = line.match(/^( +)(\d+)\. /);
+      const indentation = line.match(/^ */)?.[0].length || 0;
+
+      if (!item) {
+        if (line.trim() !== "") {
+          for (const indent of activeLists.keys()) {
+            if (indentation <= indent) activeLists.delete(indent);
+          }
+        }
+        return;
+      }
+
+      const indent = item[1]!.length;
+      const number = Number(item[2]);
+      const expected = (activeLists.get(indent) || 0) + 1;
+      assert.equal(number, expected, `${relativePath}:${lineIndex + 1} nested list should continue with ${expected}`);
+      activeLists.set(indent, number);
+      for (const activeIndent of activeLists.keys()) {
+        if (activeIndent > indent) activeLists.delete(activeIndent);
+      }
+    });
+  });
+});
+
 test("complete-manual-validation skill docs retain completion control structures", () => {
   skillDocPaths("complete-manual-validation").forEach((relativePath) => {
     const content = read(relativePath);
@@ -620,12 +649,10 @@ test("skills that write timestamps require date command guidance", () => {
   const portableTimestampCommand =
     `date "+%Y-%m-%d %H:%M:%S%z" | sed 's/\\([+-][0-9][0-9]\\)\\([0-9][0-9]\\)$/\\1:\\2/'`;
   const timestampSkills = [
-    "analyze-task",
     "block-task",
     "cancel-task",
     "close-codescan",
     "close-dependabot",
-    "code-task",
     "commit",
     "complete-manual-validation",
     "complete-task",
@@ -634,11 +661,7 @@ test("skills that write timestamps require date command guidance", () => {
     "import-codescan",
     "import-dependabot",
     "import-issue",
-    "plan-task",
     "restore-task",
-    "review-analysis",
-    "review-code",
-    "review-plan",
     "watch-pr"
   ];
 
@@ -652,6 +675,14 @@ test("skills that write timestamps require date command guidance", () => {
       );
     });
   });
+});
+
+test("event-driven workflow skills declare task events in every language variant", () => {
+  for (const skill of ["analyze-task", "review-analysis", "plan-task", "review-plan", "code-task", "review-code"]) {
+    for (const relativePath of skillDocPaths(skill)) {
+      assert.match(read(relativePath), /agent-infra-internal task-event \{task-id\}/, `${relativePath} should use the internal CLI`);
+    }
+  }
 });
 
 test("workflow skill docs update task comments before publishing artifact comments", () => {
