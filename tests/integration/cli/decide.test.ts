@@ -19,13 +19,17 @@ function fixture(rows: string[]): { repoRoot: string; taskId: string; taskMd: st
   fs.copyFileSync(SHORT_ID_SCRIPT, path.join(repoRoot, '.agents', 'scripts', 'task-short-id.js'));
   fs.writeFileSync(path.join(repoRoot, '.agents', '.airc.json'), JSON.stringify({ project: 'demo' }));
   const taskMd = path.join(taskDir, 'task.md');
-  fs.writeFileSync(taskMd, `---\nid: ${taskId}\nupdated_at: 2026-01-01 00:00:00+00:00\nagent_infra_version: v0.0.0\n---\n# Task\n\n## Review Disagreement Ledger\n\n| id | stage | round | severity | status | evidence |\n|----|-------|-------|----------|--------|----------|\n${rows.join('\n')}\n\n## Human Rulings\n\n## Activity Log\n`);
+  fs.writeFileSync(taskMd, `---\nid: ${taskId}\nupdated_at: 2026-01-01 00:00:00+00:00\nagent_infra_version: v0.0.0\n---\n# Task\n\n## Review Disagreement Ledger\n\n| id | stage | round | severity | status | evidence |\n|----|-------|-------|----------|--------|----------|\n${rows.join('\n')}\n\n## Human Rulings\n\n## Implementation Inputs\n\n| id | ledger_id | decision_evidence | stage | needs_implementation | decided_at | status | consumed_by |\n|----|-----------|-------------------|-------|----------------------|------------|--------|-------------|\n\n## Activity Log\n`);
   spawnSync('node', [SHORT_ID_SCRIPT, 'alloc', taskId], { cwd: repoRoot, encoding: 'utf8' });
   return { repoRoot, taskId, taskMd };
 }
 
 function run(repoRoot: string, args: string[]) {
-  return spawnSync('node', [CLI_PATH, ...args], { cwd: repoRoot, encoding: 'utf8' });
+  return spawnSync('node', [CLI_PATH, ...args], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: { ...process.env, TZ: 'UTC' }
+  });
 }
 
 test('real CLI writes AN, PL, CD, and HD targets through full and short task refs', () => {
@@ -39,7 +43,7 @@ test('real CLI writes AN, PL, CD, and HD targets through full and short task ref
     for (const args of [
       [data.taskId, 'AN-1', 'analysis choice'],
       ['1', 'PL-1', 'plan choice'],
-      ['#1', '1', 'code choice'],
+      ['#1', '1', '--needs-implementation', 'true', 'code choice'],
       [data.taskId, 'HD-1', 'executor choice']
     ]) {
       const result = run(data.repoRoot, ['decide', ...args]);
@@ -47,6 +51,7 @@ test('real CLI writes AN, PL, CD, and HD targets through full and short task ref
     }
     const content = fs.readFileSync(data.taskMd, 'utf8');
     assert.equal((content.match(/human-decided/g) ?? []).length, 4);
+    assert.match(content, /\| II-1 \| CD-1 \| task\.md#HDR-3 \| code \| true \| \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\+00:00 \| pending \|\s*\|/);
     assert.deepEqual([...content.matchAll(/^### HDR-(\d+)$/gm)].map((match) => match[1]), ['4', '3', '2', '1']);
     for (const id of ['AN-1', 'PL-1', 'CD-1', 'HD-1']) {
       assert.match(content, new RegExp(`\\*\\*原账本 ID\\*\\*：${id}`));
