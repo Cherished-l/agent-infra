@@ -700,6 +700,49 @@ test("artifact lifecycle skills use core context and events in every language va
   }
 });
 
+test("review handshake skills submit ledger changes through structured intents", () => {
+  for (const skill of ["review-analysis", "review-plan", "review-code"]) {
+    for (const relativePath of skillDocPaths(skill)) {
+      const content = read(relativePath);
+      assert.match(content, /agent-infra-internal task-ledger \{task-id\} finding-upsert /, `${relativePath} should submit findings through the ledger core`);
+      assert.match(content, /finding-review --id \{ledger-id\}/, `${relativePath} should submit review dispositions through the ledger core`);
+    }
+  }
+  for (const skill of ["analyze-task", "plan-task"]) {
+    for (const relativePath of skillDocPaths(skill)) {
+      const content = read(relativePath);
+      assert.match(content, /agent-infra-internal task-ledger \{task-id\} finding-respond /, `${relativePath} should submit executor responses through the ledger core`);
+      assert.match(content, /decision-next-id/, `${relativePath} should inspect decision ids through the ledger core`);
+      assert.match(content, /decision-upsert/, `${relativePath} should submit decision rows through the ledger core`);
+    }
+  }
+});
+
+test("workflow warning producers submit warnings through the internal CLI", () => {
+  const producerDocs = [
+    ".agents/rules/issue-sync.md",
+    ".agents/rules/pr-sync.md",
+    ".agents/skills/create-task/SKILL.md",
+    ".agents/skills/create-pr/SKILL.md",
+    "templates/.agents/rules/issue-sync.github.en.md",
+    "templates/.agents/rules/issue-sync.github.zh-CN.md",
+    "templates/.agents/rules/pr-sync.github.en.md",
+    "templates/.agents/rules/pr-sync.github.zh-CN.md",
+    "templates/.agents/skills/create-task/SKILL.en.md",
+    "templates/.agents/skills/create-task/SKILL.zh-CN.md",
+    "templates/.agents/skills/create-pr/SKILL.en.md",
+    "templates/.agents/skills/create-pr/SKILL.zh-CN.md"
+  ];
+
+  producerDocs.forEach((relativePath) => {
+    assert.match(
+      read(relativePath),
+      /agent-infra-internal task-warning \{task-id\} add /,
+      `${relativePath} should submit warnings directly through the internal CLI`
+    );
+  });
+});
+
 test("workflow skill docs update task comments before publishing artifact comments", () => {
   const orderedCommentSkills: Array<[string, string]> = [
     ["analyze-task", "{analysis-artifact}"],
