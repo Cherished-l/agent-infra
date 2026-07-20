@@ -19,6 +19,14 @@ Map user intent to the corresponding workflow command:
 - Before updating `agent_infra_version`, read `.agents/rules/version-stamp.md`
 - Activity Log entries are append-only and must never overwrite history
 
+## State Snapshot and Completion Verification Entrypoints
+
+- Runtime skills that record git, task-directory, and task.md tail evidence must call `agent-infra-internal task-snapshot {task-id} --format text`; they must not resolve short ids, scan workspaces, or reconstruct the three observations themselves.
+- Runtime skills that execute completion gates must call `agent-infra-internal task-verify {task-id} <verification-event> [--artifact <artifact>] --format text`; the typed verification catalog is the sole mapping from business event to skill, workspace, gate/check order, and artifact family.
+- During the series migration, `.agents/scripts/validate-artifact.js` remains an internal validation implementation invoked by `task-verify`, not a compatibility entrypoint for skills; skills declare a business event instead of passing task directories, skill names, or special check sequences.
+- Both entrypoints are read-only. Verification exits remain `0=pass`, `1=fail`, and `2=blocked`; network or platform blocking must never be downgraded to success.
+- This migration is not fully cleaned up yet: after 07/10–09/10 consolidate the platform adapters, 10/10 must remove the validator's remaining direct CLI/parser, subprocess protocol bridge, and mechanical rules superseded by the typed core.
+
 ## Required State Updates by Command
 
 - `create-task`: create `branch`, `workflow`, `status`, `created_at`, `updated_at`, `assigned_to`, `agent_infra_version`
