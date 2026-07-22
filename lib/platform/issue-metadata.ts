@@ -1,4 +1,5 @@
 import type { PlatformCapabilities, PlatformOperation } from './types.ts';
+import { computeInLabels } from './metadata-labels.ts';
 
 type Requirement = { text: string; checked: boolean };
 type RequirementSectionAnchor = { level: 2 | 3; heading: string };
@@ -43,20 +44,6 @@ function normalizeOption(value: string): string {
   return ({ '紧急': 'Urgent', '高': 'High', '中': 'Medium', '低': 'Low' } as Record<string, string>)[value] || value;
 }
 
-function computeInLabels(
-  changedFiles: string[],
-  mapping: Record<string, unknown>,
-  repositoryLabels: Set<string>
-): string[] {
-  return Object.entries(mapping).flatMap(([name, rawPrefixes]) => {
-    if (!Array.isArray(rawPrefixes)) return [];
-    const matches = rawPrefixes.some((prefix) => typeof prefix === 'string' && prefix.length > 0
-      && changedFiles.some((file) => file === prefix.replace(/\/$/, '') || file.startsWith(prefix)));
-    const label = `in: ${name}`;
-    return matches && repositoryLabels.has(label) ? [label] : [];
-  }).sort();
-}
-
 function versionParts(value: string): [number, number, number | null] | null {
   const match = /^(\d+)\.(\d+)\.(x|\d+)$/.exec(value);
   return match ? [Number(match[1]), Number(match[2]), match[3] === 'x' ? null : Number(match[3])] : null;
@@ -76,6 +63,7 @@ function chooseMilestone(
     return lines[0]?.title || (milestones.includes('General Backlog') ? 'General Backlog' : current);
   }
   const currentParts = current ? versionParts(current) : null;
+  if (currentParts && currentParts[2] !== null) return current;
   const line = currentParts?.[2] === null ? currentParts.slice(0, 2) : null;
   const versions = parsed.filter((item) => item.parts![2] !== null && (!line || (
     item.parts![0] === line[0] && item.parts![1] === line[1]
