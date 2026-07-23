@@ -2,17 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import { inspectRequiredChecks } from "../../dist/lib/platform/pr-checks.js";
+import { inspectRequiredChecks } from "./pr-checks.ts";
+import { resolvePlatformContext } from "./context.ts";
 
 const CHECK_TYPE = "required-checks";
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 
-function validPrNumber(value) {
+function validPrNumber(value: any): any {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0;
 }
 
-function readPrFlow(repoRoot) {
+function readPrFlow(repoRoot: any): any {
   try {
     const config = JSON.parse(fs.readFileSync(path.join(repoRoot, ".agents", ".airc.json"), "utf8"));
     return config.prFlow;
@@ -21,7 +22,7 @@ function readPrFlow(repoRoot) {
   }
 }
 
-function readHead(repoRoot) {
+function readHead(repoRoot: any): any {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim();
   } catch {
@@ -29,7 +30,7 @@ function readHead(repoRoot) {
   }
 }
 
-export function evaluateRequiredChecks(context, shared) {
+export function evaluateRequiredChecks(context: any, shared: any): any {
   const { metadata, localHead, inspection, prFlow } = context;
   if (prFlow === "disabled" || metadata.pr_status === "skipped" || !validPrNumber(metadata.pr_number)) {
     return shared.passResult(CHECK_TYPE, "Skipped: required checks are not applicable to this task");
@@ -61,9 +62,13 @@ export function evaluateRequiredChecks(context, shared) {
   return shared.failResult(CHECK_TYPE, inspection.error?.message || `Required checks are ${state || "unavailable"}`, "check_failed");
 }
 
-export function check({ taskDir }, shared) {
+export function check({ taskDir }: any, shared: any): any {
   const task = shared.loadTask(taskDir);
   if (!task.ok) return shared.failResult(CHECK_TYPE, task.message);
+  const platform = resolvePlatformContext({ cwd: shared.repoRoot });
+  if (platform.platform.type !== "github") {
+    return shared.passResult(CHECK_TYPE, "Skipped: this code platform does not provide required checks");
+  }
   const prFlow = readPrFlow(shared.repoRoot);
   if (prFlow === "disabled" || task.metadata.pr_status === "skipped" || !validPrNumber(task.metadata.pr_number)) {
     return evaluateRequiredChecks({ metadata: task.metadata, localHead: null, inspection: null, prFlow }, shared);
