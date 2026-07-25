@@ -24,7 +24,7 @@ function writeCommit(root: string, content: string, message: string): string {
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "merged-pr-equivalence-"));
-  git(root, ["init", "-q"]);
+  git(root, ["init", "-q", "-b", "master"]);
   git(root, ["config", "user.name", "Test"]);
   git(root, ["config", "user.email", "test@example.com"]);
   const base = writeCommit(root, "base\n", "base");
