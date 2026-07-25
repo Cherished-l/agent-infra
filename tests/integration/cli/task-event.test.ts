@@ -124,6 +124,22 @@ test('manual validation keeps code-review and supports multiple fixed-action rou
   assert.match(content, /manual-validation-r2\.md/);
 });
 
+test('manual validation keeps commit after PR preparation', () => {
+  const f = fixture('commit');
+  const started = run(f.root, [f.id, 'manual-validation.started', '--agent', 'codex']);
+  assert.equal(started.status, 0, started.stderr);
+  assert.equal(JSON.parse(started.stdout).toStep, 'commit');
+
+  fs.writeFileSync(path.join(f.dir, 'manual-validation.md'), '# Manual validation\n');
+  const done = run(f.root, [
+    f.id, 'manual-validation.completed', '--agent', 'codex',
+    '--artifact', 'manual-validation.md', '--summary-result', 'summary updated'
+  ]);
+  assert.equal(done.status, 0, done.stderr);
+  assert.equal(JSON.parse(done.stdout).toStep, 'commit');
+  assert.match(fs.readFileSync(f.file, 'utf8'), /current_step: commit/);
+});
+
 test('dry-run returns planned without changing task bytes for start and completion', () => {
   const f = fixture();
   const before = fs.readFileSync(f.file);

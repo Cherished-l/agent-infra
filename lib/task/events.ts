@@ -109,7 +109,7 @@ const FAMILY = {
   'review-plan': { artifact: 'review-plan', started: ['technical-design', 'technical-design-review'], completed: ['technical-design', 'technical-design-review'], target: 'technical-design-review', label: 'Review Plan' },
   code: { artifact: 'code', started: ['technical-design-review', 'code-review'], completed: ['technical-design-review', 'code-review'], target: 'code', label: 'Code Task' },
   'review-code': { artifact: 'review-code', started: ['code', 'code-review', 'commit'], completed: ['code', 'code-review', 'commit'], target: 'code-review', label: 'Review Code' },
-  'manual-validation': { artifact: 'manual-validation', started: ['code-review'], completed: ['code-review'], target: null, label: 'Complete Manual Validation' }
+  'manual-validation': { artifact: 'manual-validation', started: ['code-review', 'commit'], completed: ['code-review', 'commit'], target: null, label: 'Complete Manual Validation' }
 } as const;
 type EventFamily = keyof typeof FAMILY;
 
