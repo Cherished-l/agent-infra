@@ -84,7 +84,7 @@ When an executor judges an item to be a key design decision that needs human rul
 - `evidence` points to the stable anchor `<artifact>#HD-N` (e.g. `plan-r2.md#HD-1`), not a drift-prone line number.
 - A human records the ruling with `ai decide <task-ref> <ordinal|ledger-id> <decision>`; the command flips the target row to `human-decided` and points `evidence` to an independent `HDR-N` ruling record.
 
-> Viewing, deciding, and typed verification share the `lib/task/ledger.ts` domain semantics.
+> Viewing, deciding, and typed verification share the `lib/task/ledger.ts` domain semantics; no second parser is maintained.
 
 ## post-review commit gate (code stage only)
 

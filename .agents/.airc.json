@@ -97,6 +97,7 @@
       "**/test.*",
       "**/upgrade-dependency.*",
       ".agents/rules/testing-discipline.*",
+      ".agents/scripts/task-short-id.js",
       ".agents/QUICKSTART.md",
       ".agents/README.md",
       ".agents/skills/post-release/SKILL.*",

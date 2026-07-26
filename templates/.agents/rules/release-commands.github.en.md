@@ -6,17 +6,23 @@ Release-note platform operations use a typed internal intent. Callers consume st
 
 ```bash
 agent-infra-internal platform-release-notes context \
-  --from-tag "v{prev-version}" --to-tag "v{version}" \
-  --branch "{branch}" --history-limit 3
+  --from-tag "v{prev-version}" \
+  --to-tag "v{version}" \
+  --branch "{branch}" \
+  --history-limit 3
 ```
 
-The result contains release history, pull requests, closing Issues, and normalized contributor identities. Unsupported platforms return a stable `PLATFORM_RELEASE_NOTES_UNSUPPORTED` no-op.
+The result contains `history`, `pullRequests`, `closingIssues`, and commit `authors` with normalized `login` / `resolution` values. `status: no-op` with error code `PLATFORM_RELEASE_NOTES_UNSUPPORTED` means the current platform does not support remote release-note operations.
 
 ## Publish Release Notes
 
+Call this only after user confirmation:
+
 ```bash
 agent-infra-internal platform-release-notes publish \
-  --tag "v{version}" --title "v{version}" --notes-file "{notes-file}"
+  --tag "v{version}" \
+  --title "v{version}" \
+  --notes-file "{notes-file}"
 ```
 
-The command updates an existing Release or creates a missing one. `--dry-run` only plans the operation. Exit codes `0/1/2` mean success, failure, and blocked.
+The command updates an existing Release or creates it when missing; `--dry-run` returns only the planned operation. Exit code `0` means success, `1` means a stable failure, and `2` means a network or platform block.
