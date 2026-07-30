@@ -135,7 +135,7 @@ test("loadConfig parses the minimal {id, install} customTools entry and fills al
     // sandboxBase is always derived; not user-configurable
     assert.equal(
       tool?.sandboxBase,
-      path.join(process.env.HOME ?? "", ".agent-infra", "sandboxes", "my-tool")
+      path.join(os.homedir(), ".agent-infra", "sandboxes", "my-tool")
     );
     // Optional integration fields stay undefined when omitted
     assert.equal(tool?.envVars, undefined);
@@ -315,7 +315,7 @@ test("loadConfig always assigns the default sandboxBase and ignores user-supplie
     const config = withGitSafeProcessEnv(() => sandboxConfig.loadConfig());
     assert.equal(
       config.customTools[0]?.sandboxBase,
-      path.join(process.env.HOME ?? "", ".agent-infra", "sandboxes", "fixed-base")
+      path.join(os.homedir(), ".agent-infra", "sandboxes", "fixed-base")
     );
   } finally {
     process.chdir(previousCwd);
@@ -353,7 +353,7 @@ test("loadConfig rejects customTools entries with empty install.cmd", async () =
   }
 });
 
-test("resolveTools merges builtin and customTools, preserving sandbox.tools ordering", async () => {
+test("resolveTools groups non-client builtins, clients, and custom tools deterministically", async () => {
   const sandboxTools = await loadFreshEsm<SandboxToolsModule>("lib/sandbox/tools.js");
 
   const tools = sandboxTools.resolveTools({
@@ -375,9 +375,9 @@ test("resolveTools merges builtin and customTools, preserving sandbox.tools orde
 
   assert.deepEqual(
     tools.map((tool) => tool.id),
-    ["my-shell-tool", "claude-code"]
+    ["claude-code", "my-shell-tool"]
   );
-  assert.deepEqual(tools[0]?.install, { type: "shell", cmd: SHELL_INSTALL_CMD });
+  assert.deepEqual(tools[1]?.install, { type: "shell", cmd: SHELL_INSTALL_CMD });
 });
 
 test("resolveTools throws when customTools id collides with a built-in tool", async () => {

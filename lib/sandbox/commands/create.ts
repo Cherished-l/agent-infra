@@ -8,6 +8,8 @@ import { parseArgs } from 'node:util';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import * as toml from 'smol-toml';
+import { listAgentClientAdapters } from '../../agent-clients/registry.ts';
+import type { SandboxAlias } from '../tool-types.ts';
 import { loadConfig } from '../config.ts';
 import {
   assertValidBranchName,
@@ -18,6 +20,7 @@ import {
   sandboxImageConfigLabel,
   sandboxImageRefreshLabel,
   sandboxLabel,
+  sandboxRuntimeCapabilityLabel,
   shareBranchDir,
   shareCommonDir,
   shellConfigDir,
@@ -44,6 +47,11 @@ import {
 } from '../shell.ts';
 import { resolveTaskBranch } from '../task-resolver.ts';
 import {
+  createSandboxCapabilityPlan,
+  runSandboxHooks,
+  runBoundedSandboxHookCommand
+} from '../agent-client-reconciler.ts';
+import {
   resolveTools,
   tmpfsSeedStagingPath,
   tmpfsSeedTargetPath,
@@ -61,6 +69,7 @@ import { clipboardHostDir, CONTAINER_CLIPBOARD_MOUNT } from '../clipboard/paths.
 import { validateSelinuxDisableEnv } from '../engines/selinux.ts';
 import { dotfilesCacheDir, materializeDotfiles } from '../dotfiles.ts';
 import { ensureSandboxDiscoveryReadmes } from '../readme-scaffold.ts';
+import { removeDirRecursive } from '../../remove-dir.ts';
 import {
   prepareClaudeCredentials,
   redactCommandError,
@@ -76,29 +85,8 @@ import {
   parseRefreshTimestamp
 } from '../image-build.ts';
 
-const OPENCODE_YOLO_PERMISSION = '{"*":"allow","read":"allow","bash":"allow","edit":"allow","webfetch":"allow","external_directory":"allow","doom_loop":"allow"}';
 const SANDBOX_ALIAS_BLOCK_BEGIN = '# >>> agent-infra managed aliases >>>';
 const SANDBOX_ALIAS_BLOCK_END = '# <<< agent-infra managed aliases <<<';
-const SANDBOX_ALIAS_NAMES = [
-  'claude-yolo',
-  'opencode-yolo',
-  'codex-yolo',
-  'gemini-yolo',
-  'cy',
-  'oy',
-  'xy',
-  'gy'
-];
-const DEFAULT_SANDBOX_ALIASES = `alias claude-yolo='claude --dangerously-skip-permissions; tput ed'
-alias opencode-yolo='OPENCODE_PERMISSION='\\''${OPENCODE_YOLO_PERMISSION}'\\'' opencode; tput ed'
-alias codex-yolo='codex --yolo; tput ed'
-alias gemini-yolo='gemini --yolo; tput ed'
-
-alias cy='claude --dangerously-skip-permissions; tput ed'
-alias oy='OPENCODE_PERMISSION='\\''${OPENCODE_YOLO_PERMISSION}'\\'' opencode; tput ed'
-alias xy='codex --yolo; tput ed'
-alias gy='gemini --yolo; tput ed'
-`;
 const CONTAINER_HOME = '/home/devuser';
 const CONTAINER_SHELL_CONFIG_MOUNT = `${CONTAINER_HOME}/.host-shell-config`;
 const USAGE = `Usage: ai sandbox create <branch> [base] [--cpu <n>] [--memory <n>] [--no-refresh] [--inherit-proxy|-P] [--inherit-build-proxy|-B]
@@ -410,7 +398,7 @@ export function prepareHostShellConfig({
   repoRoot: string;
 }): HostShellConfig {
   const hostDir = hostShellConfigDir(home, project, branch);
-  fs.rmSync(hostDir, { recursive: true, force: true });
+  removeDirRecursive(hostDir);
   fs.mkdirSync(hostDir, { recursive: true });
 
   writeSanitizedGitconfig({
@@ -459,10 +447,19 @@ function normalizeWorktreePath(worktreePath: string): string {
     return '';
   }
 
+  const wslMount = process.platform === 'win32'
+    ? worktreePath.match(/^\/mnt\/([A-Za-z])(?:\/(.*))?$/)
+    : null;
+  const hostPath = wslMount
+    ? `${wslMount[1]!.toUpperCase()}:\\${(wslMount[2] ?? '').replace(/\//g, '\\')}`
+    : worktreePath;
+
   try {
-    return fs.existsSync(worktreePath) ? fs.realpathSync(worktreePath) : path.resolve(worktreePath);
+    const normalized = fs.existsSync(hostPath) ? fs.realpathSync(hostPath) : path.resolve(hostPath);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
   } catch {
-    return path.resolve(worktreePath);
+    const normalized = path.resolve(hostPath);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
   }
 }
 
@@ -714,7 +711,7 @@ export function buildContainerEnvFile(
     mkdtempFn = fs.mkdtempSync,
     writeFileFn = fs.writeFileSync,
     chmodFn = fs.chmodSync,
-    rmFn = fs.rmSync,
+    rmFn = removeDirRecursive as typeof fs.rmSync,
     tmpDir = os.tmpdir(),
     runSafeFn = runSafe
   } = options;
@@ -1189,7 +1186,10 @@ function stripManagedSandboxAliasBlocks(content: string): string {
   return content.replace(blockPattern, '').trimEnd();
 }
 
-function isLegacyManagedSandboxAliasFile(content: string): boolean {
+function isLegacyManagedSandboxAliasFile(
+  content: string,
+  aliases: readonly SandboxAlias[]
+): boolean {
   const lines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -1199,13 +1199,29 @@ function isLegacyManagedSandboxAliasFile(content: string): boolean {
     return false;
   }
 
-  const aliasPattern = new RegExp(`^alias (${SANDBOX_ALIAS_NAMES.map(escapeRegExp).join('|')})=`);
+  const aliasPattern = new RegExp(
+    `^alias (${aliases.map((alias) => escapeRegExp(alias.name)).join('|')})=`
+  );
   return lines.every((line) => aliasPattern.test(line));
 }
 
-export function ensureSandboxAliasesFile(home: string): { created: boolean; path: string } {
+function registrySandboxAliases(): readonly SandboxAlias[] {
+  return listAgentClientAdapters().flatMap((adapter) => adapter.sandbox.aliases);
+}
+
+function renderSandboxAliases(aliases: readonly SandboxAlias[]): string {
+  return `${aliases.map((alias) =>
+    `alias ${alias.name}='${alias.command.replaceAll("'", "'\\''")}'`
+  ).join('\n')}\n`;
+}
+
+export function ensureSandboxAliasesFile(
+  home: string,
+  aliases: readonly SandboxAlias[] = registrySandboxAliases()
+): { created: boolean; path: string } {
   const aliasesPath = sandboxAliasesPath(home);
-  const managedBlock = `${SANDBOX_ALIAS_BLOCK_BEGIN}\n${DEFAULT_SANDBOX_ALIASES}${SANDBOX_ALIAS_BLOCK_END}\n`;
+  const managedBlock =
+    `${SANDBOX_ALIAS_BLOCK_BEGIN}\n${renderSandboxAliases(aliases)}${SANDBOX_ALIAS_BLOCK_END}\n`;
   fs.mkdirSync(path.dirname(aliasesPath), { recursive: true });
   const created = !fs.existsSync(aliasesPath);
   let existing = '';
@@ -1214,7 +1230,7 @@ export function ensureSandboxAliasesFile(home: string): { created: boolean; path
     existing = fs.readFileSync(aliasesPath, 'utf8');
   }
 
-  const userContent = isLegacyManagedSandboxAliasFile(existing)
+  const userContent = isLegacyManagedSandboxAliasFile(existing, aliases)
     ? ''
     : stripManagedSandboxAliasBlocks(existing);
   const nextContent = userContent
@@ -1355,19 +1371,18 @@ export async function create(args: string[]): Promise<void> {
   };
   const worktreeCandidates = worktreeDirCandidates(effectiveConfig, branch);
   assertBranchAvailable(config.repoRoot, branch, { allowedWorktrees: worktreeCandidates });
-  const tools = resolveTools(effectiveConfig);
+  const capabilityPlan = createSandboxCapabilityPlan(effectiveConfig);
+  const tools = [...capabilityPlan.tools];
   const resolvedTools = resolveToolDirs(effectiveConfig, tools, branch);
   // Fatal credential states still fail before filesystem/docker side effects.
-  // A genuinely missing Claude Code credential only removes Claude Code's
-  // sandbox config and credential mounts for this create run.
+  // Missing credentials leave the selected Claude Code capability installed
+  // and mounted; only the absent live credential file is omitted.
   const credentialOutcome = prepareClaudeCredentials(
     effectiveConfig.home,
     effectiveConfig.project,
     resolvedTools
   );
-  const effectiveResolvedTools = credentialOutcome.status === 'SKIPPED'
-    ? resolvedTools.filter(({ tool }) => tool.id !== 'claude-code')
-    : resolvedTools;
+  const effectiveResolvedTools = resolvedTools;
   const container = containerName(effectiveConfig, branch);
   const worktree = worktreeCandidates.find((candidate) => fs.existsSync(candidate)) ?? worktreeCandidates[0] ?? '';
   const shareCommon = shareCommonDir(effectiveConfig);
@@ -1392,6 +1407,16 @@ export async function create(args: string[]): Promise<void> {
 
   try {
     p.log.step('Checking container engine...');
+    const prepareHookResults = await runSandboxHooks({
+      hooks: capabilityPlan.hooksByPhase.prepare,
+      phase: 'prepare',
+      context: { config: effectiveConfig, plan: capabilityPlan },
+      runCommand: runBoundedSandboxHookCommand
+    });
+    const prepareFailure = prepareHookResults.find((result) => result.status === 'fatal');
+    if (prepareFailure) {
+      throw new Error(prepareFailure.message ?? `Sandbox hook '${prepareFailure.hookId}' failed.`);
+    }
     await ensureDocker(effectiveConfig, (detail: string) => {
       p.log.info(`  ${detail}`);
     });
@@ -1476,7 +1501,7 @@ export async function create(args: string[]): Promise<void> {
             if (fs.readdirSync(worktree).length > 0) {
               return `Worktree exists at ${worktree}`;
             }
-            fs.rmSync(worktree, { recursive: true, force: true });
+            removeDirRecursive(worktree);
           }
 
           const branchExists = runOk('git', [
@@ -1573,7 +1598,10 @@ export async function create(args: string[]): Promise<void> {
             }
           }
 
-          const aliasesFile = ensureSandboxAliasesFile(effectiveConfig.home);
+          const aliasesFile = ensureSandboxAliasesFile(
+            effectiveConfig.home,
+            capabilityPlan.aliases
+          );
           if (aliasesFile.created) {
             message(`Created default sandbox aliases at ${aliasesFile.path}`);
           }
@@ -1609,6 +1637,21 @@ export async function create(args: string[]): Promise<void> {
           let hostShellConfig: HostShellConfig;
           let tmpfsSeedPlan: TmpfsSeedPlanEntry[] = [];
           try {
+            const beforeCreateResults = await runSandboxHooks({
+              hooks: capabilityPlan.hooksByPhase['before-container-create'],
+              phase: 'before-container-create',
+              context: { config: effectiveConfig, plan: capabilityPlan },
+              runCommand: runBoundedSandboxHookCommand
+            });
+            const beforeCreateFailure = beforeCreateResults.find(
+              (result) => result.status === 'fatal'
+            );
+            if (beforeCreateFailure) {
+              throw new Error(
+                beforeCreateFailure.message
+                ?? `Sandbox hook '${beforeCreateFailure.hookId}' failed.`
+              );
+            }
             const claudeCodeEntry = effectiveResolvedTools.find(({ tool }) => tool.id === 'claude-code');
             if (claudeCodeEntry) {
               ensureClaudeOnboarding(claudeCodeEntry.dir, effectiveConfig.home);
@@ -1709,6 +1752,8 @@ export async function create(args: string[]): Promise<void> {
               sandboxLabel(effectiveConfig),
               '--label',
               `${sandboxBranchLabel(effectiveConfig)}=${branch}`,
+              '--label',
+              `${sandboxRuntimeCapabilityLabel(effectiveConfig)}=${capabilityPlan.runtimeSignature}`,
               ...coreVolumes,
               ...buildClipboardVolumeArgs(engine, effectiveConfig.home),
               '-v',
@@ -1803,6 +1848,22 @@ export async function create(args: string[]): Promise<void> {
             for (const command of tool.postSetupCmds ?? []) {
               runSafeEngine(engine, 'docker', ['exec', container, 'bash', '-lc', command]);
             }
+          }
+
+          const afterStartResults = await runSandboxHooks({
+            hooks: capabilityPlan.hooksByPhase['after-container-start'],
+            phase: 'after-container-start',
+            context: { config: effectiveConfig, plan: capabilityPlan },
+            runCommand: runBoundedSandboxHookCommand
+          });
+          const afterStartFailure = afterStartResults.find(
+            (result) => result.status === 'fatal'
+          );
+          if (afterStartFailure) {
+            throw new Error(
+              afterStartFailure.message
+              ?? `Sandbox hook '${afterStartFailure.hookId}' failed.`
+            );
           }
 
           return 'Container started';
