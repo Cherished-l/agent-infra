@@ -72,10 +72,10 @@ Sleep 1s
 
 # Prompt 5: Platform type — accept default (github)
 Enter
-Wait+Screen /Built-in TUI/
+Wait+Screen /Agent Client project integrations/
 Sleep 3s
 
-# Prompt 6: Built-in TUI command files — keep all four built-in TUIs
+# Prompt 6: Agent Client project integrations — keep all four built-in clients
 Type "1,2,3,4"
 Sleep 500ms
 Enter
