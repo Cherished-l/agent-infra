@@ -175,6 +175,31 @@ test('started replay keeps the open identity after its artifact lands', () => {
   assert.equal((fs.readFileSync(f.file, 'utf8').match(/Plan Task \(Round 1\) \[started\]/g) ?? []).length, 1);
 });
 
+test('plan event reopens technical design after commit preparation', () => {
+  const f = fixture('commit');
+  fs.writeFileSync(path.join(f.dir, 'plan.md'), '# Plan round 1\n');
+
+  const started = run(f.root, [f.id, 'plan.started', '--agent', 'codex']);
+  assert.equal(started.status, 0, started.stdout || started.stderr);
+  const startedResult = JSON.parse(started.stdout);
+  assert.equal(startedResult.status, 'applied');
+  assert.equal(startedResult.fromStep, 'commit');
+  assert.equal(startedResult.toStep, 'commit');
+  assert.equal(startedResult.round, 2);
+  assert.equal(startedResult.artifact, 'plan-r2.md');
+
+  fs.writeFileSync(path.join(f.dir, 'plan-r2.md'), '# Plan round 2\n');
+  const completed = run(f.root, [
+    f.id, 'plan.completed', '--agent', 'codex', '--artifact', 'plan-r2.md'
+  ]);
+  assert.equal(completed.status, 0, completed.stdout || completed.stderr);
+  assert.equal(JSON.parse(completed.stdout).toStep, 'technical-design');
+  const content = fs.readFileSync(f.file, 'utf8');
+  assert.match(content, /current_step: technical-design/);
+  assert.match(content, /Plan Task \(Round 2\) \[started\]/);
+  assert.match(content, /\]\(plan-r2\.md\)/);
+});
+
 test('manual validation keeps code-review and supports multiple fixed-action rounds', () => {
   const f = fixture('code-review');
   for (const [round, name] of [[1, 'manual-validation.md'], [2, 'manual-validation-r2.md']] as const) {
