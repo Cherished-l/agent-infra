@@ -7,10 +7,21 @@ const AGENT_CLIENT_IDS = [
 
 type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
 
+type OrchestrationRolePolicy = Readonly<{
+  model: string;
+  reasoningEffort: string;
+}>;
+
+type OrchestrationModelPolicy = Readonly<{
+  executor: OrchestrationRolePolicy;
+  reviewer: OrchestrationRolePolicy;
+}>;
+
 type AgentClientConfig = Readonly<{
   id: AgentClientId;
   enabled: boolean;
   installInSandbox: boolean;
+  orchestration?: OrchestrationModelPolicy;
 }>;
 
 type AgentClientsConfig = readonly AgentClientConfig[];
@@ -21,6 +32,7 @@ type AgentClientState = Readonly<
     Readonly<{
       enabled: boolean;
       installInSandbox: boolean;
+      orchestration?: OrchestrationModelPolicy;
     }>
   >
 >;
@@ -68,6 +80,8 @@ export {
 };
 export type {
   AgentClientId,
+  OrchestrationRolePolicy,
+  OrchestrationModelPolicy,
   AgentClientConfig,
   AgentClientsConfig,
   AgentClientState,

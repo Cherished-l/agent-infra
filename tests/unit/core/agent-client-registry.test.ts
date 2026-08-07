@@ -33,7 +33,7 @@ const CAPABILITY_MATRIX = {
     commands: 'integrated',
     hooks: 'integrated',
     subagents: 'experimental',
-    orchestration: 'experimental',
+    orchestration: 'unsupported',
     sandbox: 'integrated',
     verification: 'compatible'
   },
@@ -86,6 +86,15 @@ function adapterInput(
     displayName: 'Codex',
     invocation: '$${skillName}',
     capabilities: capabilityMap(),
+    modelSelection: {
+      kind: 'interactive-only',
+      command: '/model',
+      guidance: 'Use the host model picker.'
+    },
+    delegationEvidence: {
+      actualModel: 'unavailable',
+      actualReasoningEffort: 'unavailable'
+    },
     project: {
       ownedPathPrefixes: ['.codex/'],
       managed: ['.codex/hooks.json'],

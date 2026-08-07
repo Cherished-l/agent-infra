@@ -175,13 +175,13 @@ The most-used lifecycle commands, in delivery order. The command prefix varies b
 | Command | Purpose |
 |---------|---------|
 | `create-task` / `import-issue` | Start a task from a description or a GitHub Issue |
-| `run-task` | Resume and orchestrate the lifecycle in Claude Code with fresh isolated executors/reviewers until a safe commit or stable pause; Codex currently fails closed because its multi-agent runtime does not expose the required lifecycle events |
+| `run-task` | Resume the lifecycle with fresh isolated executors/reviewers when the selected client exposes verified actual model/effort evidence; current built-in clients, including Claude Code and Codex, fail closed before delegation because their native start events do not expose all required evidence |
 | `analyze-task` → `review-analysis` | Capture scope and risks, then review the analysis |
 | `plan-task` → `review-plan` | Design the approach, then review the plan |
 | `code-task` → `review-code` | Implement and test, then run a structured code review |
 | `commit` → `create-pr` → `complete-task` | Commit, open a PR, and archive the task |
 
-Start a new orchestration run with explicit role models, for example: `$run-task 42 --executor-model <model-id> --reviewer-model <model-id>`. If both roles must use one model, also provide `--same-model-reason "<reason>"`. Re-entry may omit these flags because the run policy is persisted and immutable.
+Start with one atomic role policy, for example: `$run-task 42 --executor-model <id> --executor-reasoning-effort <value> --reviewer-model <id> --reviewer-reasoning-effort <value>`. Both roles may use the same model. With no explicit policy, `run-task` reads the current Agent Client's optional `agentClients[].orchestration`; if neither source is complete, it shows the host model-selection guidance before creating any run. Re-entry uses the persisted v2 policy.
 
 See the full catalog — task status, release, security, and project-maintenance skills — in [Built-in AI Skills](./docs/en/skills.md).
 
