@@ -12,6 +12,8 @@
 | `summary` | `<!-- sync-issue:{task-id}:summary -->` |
 | `cancel` | `<!-- sync-issue:{task-id}:cancel -->` |
 
+`pr-review` content is synced only as an Issue artifact comment (via the `artifact` / `artifactChunk` markers) and is never a `restore-task` recovery source; restore still accepts only an Issue number and reads only registered Issue markers, with no PR source.
+
 Comments use `platform-comment`; Issue resources use `platform-issue`:
 
 ```bash
