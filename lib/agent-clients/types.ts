@@ -1,7 +1,7 @@
 const AGENT_CLIENT_IDS = [
   'claude-code',
   'codex',
-  'gemini-cli',
+  'antigravity-cli',
   'opencode'
 ] as const;
 

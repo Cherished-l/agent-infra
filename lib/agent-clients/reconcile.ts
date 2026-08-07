@@ -236,7 +236,8 @@ function planAgentClientReconciliation(input: Readonly<{
   const actionableSeed = seedOperations.some((operation) =>
     operation.kind === 'write' || operation.kind === 'remove'
   );
-  const changed = JSON.stringify(nextConfig) !== JSON.stringify(input.config) || actionableSeed;
+  const changed = JSON.stringify(nextConfig) !== JSON.stringify(input.config)
+    || actionableSeed;
 
   return Object.freeze({
     source: normalized.source,

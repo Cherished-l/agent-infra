@@ -40,7 +40,7 @@ const DEFAULTS = {
       "installInSandbox": true
     },
     {
-      "id": "gemini-cli",
+      "id": "antigravity-cli",
       "enabled": true,
       "installInSandbox": true
     },
@@ -146,18 +146,12 @@ const AGENT_CLIENT_MANIFEST = [
     "ejected": []
   },
   {
-    "id": "gemini-cli",
-    "displayName": "Gemini CLI",
-    "invocation": "/${projectName}:${skillName}",
-    "ownedPathPrefixes": [
-      ".gemini/"
-    ],
-    "managed": [
-      ".gemini/commands/"
-    ],
-    "merged": [
-      ".gemini/settings.json"
-    ],
+    "id": "antigravity-cli",
+    "displayName": "Antigravity CLI",
+    "invocation": "/${skillName}",
+    "ownedPathPrefixes": [],
+    "managed": [],
+    "merged": [],
     "ejected": []
   },
   {
@@ -547,14 +541,13 @@ function detectCustomSkills(projectRoot, templateSkillNames) {
     .sort((left, right) => left.dirName.localeCompare(right.dirName));
 }
 
-function isCustomProtected(targetPath, customSkills, project, customTUICommandTargets) {
+function isCustomProtected(targetPath, customSkills, customTUICommandTargets) {
   const normalized = norm(targetPath);
 
   return customSkills.some(({ dirName }) => (
     normalized.startsWith(`.agents/skills/${dirName}/`) ||
     normalized === `.claude/commands/${dirName}.md` ||
     normalized === `.opencode/commands/${dirName}.md` ||
-    normalized === '.gemini/commands/' + project + '/' + dirName + '.toml' ||
     customTUICommandTargets.has(normalized)
   ));
 }
@@ -763,15 +756,6 @@ function formatYamlMetadata(key, value) {
   return [`${key}: |-`, ...value.split('\n').map((line) => `  ${line}`)];
 }
 
-function formatTomlMetadata(key, value) {
-  if (!value.includes('\n')) {
-    return `${key} = ${JSON.stringify(value)}`;
-  }
-
-  const lines = value.split('\n').map((line) => JSON.stringify(line).slice(1, -1));
-  return `${key} = """${lines.join('\n')}"""`;
-}
-
 function generateClaudeCommand(skill, lang) {
   const isZhCN = lang === 'zh-CN';
   const lines = ['---', ...formatYamlMetadata('description', skill.description)];
@@ -794,31 +778,6 @@ function generateClaudeCommand(skill, lang) {
   lines.push(isZhCN ? '严格按照技能中定义的所有步骤执行。' : 'Follow all steps defined in the skill exactly.');
 
   return `${lines.join('\n')}\n`;
-}
-
-function generateGeminiCommand(skill, lang) {
-  const isZhCN = lang === 'zh-CN';
-  const promptLines = [];
-
-  if (skill.args) {
-    promptLines.push(isZhCN ? '参数：{{args}}' : 'Arguments: {{args}}');
-    promptLines.push('');
-  }
-
-  promptLines.push(
-    isZhCN
-      ? `读取并执行 \`.agents/skills/${skill.dirName}/SKILL.md\` 中的 ${skill.dirName} 技能。`
-      : `Read and execute the ${skill.dirName} skill from \`.agents/skills/${skill.dirName}/SKILL.md\`.`
-  );
-  promptLines.push('');
-  promptLines.push(isZhCN ? '严格按照技能中定义的所有步骤执行。' : 'Follow all steps defined in the skill exactly.');
-
-  return [
-    formatTomlMetadata('description', skill.description),
-    'prompt = """',
-    ...promptLines,
-    '"""'
-  ].join('\n') + '\n';
 }
 
 function generateOpenCodeCommand(skill, lang) {
@@ -1069,7 +1028,6 @@ function learnAndGenerateCommands(projectRoot, customSkills, tool, templateSkill
 function generateCustomCommands(
   projectRoot,
   customSkills,
-  project,
   lang,
   report,
   customTUIs,
@@ -1082,13 +1040,6 @@ function generateCustomCommands(
       managedWriter(
         `.claude/commands/${skill.dirName}.md`,
         generateClaudeCommand(skill, lang),
-        report.custom.commands
-      );
-    }
-    if (enabledTUIs.has('gemini-cli')) {
-      managedWriter(
-        '.gemini/commands/' + project + '/' + skill.dirName + '.toml',
-        generateGeminiCommand(skill, lang),
         report.custom.commands
       );
     }
@@ -1699,7 +1650,7 @@ function syncTemplates(projectRoot, templateRootOverride) {
         for (const projFile of projFiles) {
           if (expectedTargets.has(projFile)) continue;
           if (projFile === configPathRel) continue;
-          if (isCustomProtected(projFile, protectedCustomSkills, project, customTUICommandTargets)) continue;
+          if (isCustomProtected(projFile, protectedCustomSkills, customTUICommandTargets)) continue;
           if (matchesAny(projFile, merged) || matchesAny(projFile, ejected)) continue;
           if (assetPlan.enabledManaged.includes(entry)) {
             const baseline = trustedBaseline(managedBaselines[projFile]);
@@ -1741,7 +1692,6 @@ function syncTemplates(projectRoot, templateRootOverride) {
   generateCustomCommands(
     projectRoot,
     customSkills,
-    project,
     lang,
     report,
     customTUIs,
