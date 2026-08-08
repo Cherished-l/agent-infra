@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  changedPaths,
   computeDemoInputDigest,
   inspectLocalReleaseFacts,
   inspectPostWorktree,
@@ -68,6 +69,23 @@ function releaseFixture() {
   spawnSync('git', ['tag', 'v1.2.3'], { cwd: root });
   return root;
 }
+
+test('changed paths parse porcelain v1 status combinations', () => {
+  const run: CommandRunner = () => result(0, ' M .agents/.airc.json\r\nM  package.json\r\nMM package-lock.json\r\n?? new-file.txt\r\n');
+
+  assert.deepEqual(changedPaths('/repo', run), [
+    '.agents/.airc.json',
+    'package.json',
+    'package-lock.json',
+    'new-file.txt'
+  ]);
+});
+
+test('changed paths reject malformed porcelain v1 records', () => {
+  const run: CommandRunner = () => result(0, ' M package.json\ninvalid-record\n');
+
+  assert.throws(() => changedPaths('/repo', run), /Invalid git status --porcelain=v1 record/);
+});
 
 test('local release facts distinguish exact, ancestor, and divergent tags with bounded post history', () => {
   const root = releaseFixture();
