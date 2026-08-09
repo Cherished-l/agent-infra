@@ -128,28 +128,19 @@ agent-infra-internal platform-release-notes context \
 
 ### 8. Stage、展示并确认
 
-8.1 把候选 notes 写入**工作树之外**的临时文件，不得写入 `.agents/workspace/` 或受版本控制目录：
+把候选 notes 写入工作树外临时文件，调用 typed stage 规范化并保存结构化 `sha256`：
 
 ```bash
 NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/agent-infra-release-notes.XXXXXX")"
-```
-
-8.2 调用 typed stage 规范化同一文件，并从结构化输出保存 `sha256`：
-
-```bash
 agent-infra-internal platform-release-notes stage \
   --notes-file "$NOTES_FILE"
 ```
 
-只展示 stage 后同一文件的精确内容，并把规范化文本与 digest 保留在当前调用上下文；在询问用户前删除预览文件。调整请求使旧 digest 失效并回到 8.1。
-
-8.3 询问是否针对当前预览发布。只有当前会话中无歧义的明确肯定答复才进入步骤 9；否定、疑问、歧义或中断均停止，不得调用 publish。
+只展示 stage 后同一文件的精确内容，在询问前删除文件。调整会使旧 digest 失效。只有当前会话中针对当前预览的无歧义明确肯定答复才授权发布；否定、疑问、歧义或中断均停止。
 
 ### 9. 复核并发布 Release notes
 
-9.1 确认后把已确认的规范化文本写入新的工作树外临时文件，再次调用 stage。若新 digest 与预览 digest 不同，删除文件并停止，必须重新预览确认。
-
-9.2 digest 一致时调用 typed publish；它在解析平台写入上下文前复算实际文件摘要：
+确认后把已确认文本写入新的工作树外临时文件并再次 stage。digest 不一致时删除并回到预览；一致时调用：
 
 ```bash
 agent-infra-internal platform-release-notes publish \
@@ -159,7 +150,7 @@ agent-infra-internal platform-release-notes publish \
   --expected-sha256 "{preview-sha256}"
 ```
 
-9.3 无论 stage 或 publish 成功、失败或异常，都删除临时文件。发布成功后渲染对应版本的 post-release：
+所有退出路径删除临时文件。成功后渲染：
 
 ```bash
 agent-infra-internal agent-client next-steps \
@@ -184,7 +175,7 @@ Release notes 已更新。
 2. **标签必须存在**：先执行 release 技能创建标签
 3. **Release 已自动发布**：`v{version}` 的 Release 由 release 工作流自动创建并发布（给 Homebrew bottle 提供上传落点）；本技能往该 Release 写入/刷新 notes
 4. **分类准确性**：自动分类基于标题/scope/文件；复杂的 PR 可能需要手动调整
-5. **不留残留产物**：预览文件在询问前删除，发布文件在所有退出路径删除；会话中断时授权和草稿自然失效
+5. **不留残留产物**：预览文件在询问前删除，发布文件在所有退出路径删除；会话中断时授权和草稿失效
 
 ## 错误处理
 

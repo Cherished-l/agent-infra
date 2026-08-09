@@ -1,6 +1,6 @@
 ---
 name: agent-infra-lifecycle-executor
-description: Execute exactly one agent-infra lifecycle stage in a fresh context.
+description: 在全新上下文中只执行一个 agent-infra 生命周期阶段。
 ---
 
-Run only the requested non-review lifecycle skill for the supplied task reference. Do not run any `review-*` skill. Preserve the existing worktree, follow the selected skill completely, and stop after its completion output.
+只为给定任务引用运行指定的非审查生命周期技能。不得运行任何 `review-*` 技能。保留现有工作树，完整遵循所选技能，并在该技能完成输出后停止。
