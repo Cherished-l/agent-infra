@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { read } from "../../helpers.ts";
+import { normalizeAgentClients } from "../../../lib/agent-clients/config.ts";
 import { parseCustomTools, resolveTools } from "../../../lib/sandbox/tools.ts";
 
 const collaborator = JSON.parse(read(".agents/.airc.json"));
@@ -46,7 +47,7 @@ test(".agents/.airc.json declares default sandbox configuration", () => {
   assert.deepEqual(collaborator.sandbox, {
     engine: "orbstack",
     runtimes: ["node22"],
-    tools: ["agent-infra", "claude-code", "codex", "git-lfs", "opencode"],
+    tools: ["agent-infra", "git-lfs"],
     customTools: [
       {
         id: "git-lfs",
@@ -61,13 +62,24 @@ test(".agents/.airc.json declares default sandbox configuration", () => {
   });
 });
 
+test(".agents/.airc.json declares canonical Agent Client configuration", () => {
+  assert.deepEqual(collaborator.agentClients, [
+    { id: "claude-code", enabled: true, installInSandbox: true },
+    { id: "codex", enabled: true, installInSandbox: true },
+    { id: "antigravity-cli", enabled: true, installInSandbox: false },
+    { id: "opencode", enabled: true, installInSandbox: true }
+  ]);
+});
+
 test(".agents/.airc.json resolves every selected sandbox tool", () => {
   const customTools = parseCustomTools(collaborator.sandbox.customTools, { home: "/tmp" });
+  const agentClients = normalizeAgentClients(collaborator);
   const tools = resolveTools({
     home: "/tmp",
     project: collaborator.project,
     tools: collaborator.sandbox.tools,
-    customTools
+    customTools,
+    agentClientState: agentClients.state
   });
 
   assert.deepEqual(
