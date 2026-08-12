@@ -6,7 +6,7 @@
     "type": "github"
   },
   "prFlow": "required",
-  "templateVersion": "v0.9.4",
+  "templateVersion": "v0.9.5-alpha.0",
   "sandbox": {
     "engine": "orbstack",
     "runtimes": [
@@ -87,7 +87,8 @@
       ".github/workflows/pr-label.yml",
       ".github/workflows/status-label.yml",
       ".agents/QUICKSTART.md",
-      ".agents/README.md"
+      ".agents/README.md",
+      ".claude/rules/"
     ],
     "merged": [
       "**/post-release.*",
@@ -151,7 +152,7 @@
       ".claude/commands/review-plan.md": "sha256:430b8db4b381e5e9f5df183944108e0ba9aa2a823637ad7008f8ccaf738048bc",
       ".claude/commands/review-pr.md": "sha256:8c2c6100b2e3ef783a276757ed4f44d23d7734f27ce9952ede00c5ba58bef8ea",
       ".claude/commands/run-task.md": "sha256:c2794d951f2272f288952e4dd5d1987eed3477385f495782cd989e8d93be33d2",
-      ".claude/commands/watch-pr.md": "sha256:a2fab5dc0de20d6dbd5a10a1324c5181055f2befb62f800167761fbd062a5fc4",
+      ".claude/commands/watch-pr.md": "sha256:b0e4b0122a82d82dc4da79994372c6b4d828e0cdc54dad6ab6bce0de786572a5",
       ".codex/hooks.json": "sha256:11747ef14049a792076390b51bf88b9b789659fd24cf0669ee2e8fa6d0d8a599",
       ".opencode/commands/analyze-task.md": "sha256:3bd84f4b2d1112d5cddad6d54fb1eaf1f959467d0e18abe2c8851b2d5eb28bb4",
       ".opencode/commands/archive-tasks.md": "sha256:2eaf6011a8ee85051e19d964021f2936d3bb2aa43236fc4a06cef58e836f7dbd",
@@ -180,13 +181,14 @@
       ".opencode/commands/review-plan.md": "sha256:b5fc5a10d229174158f21db61537771a859c3cc4b213624df7c33818e12be803",
       ".opencode/commands/review-pr.md": "sha256:fc9855c9548a5407b8eb307e975cba7f95adc61b0b41737bb42ae3868bd6845d",
       ".opencode/commands/run-task.md": "sha256:01a83a668fcc4a095949e97606bf2fe4f0c1546aa1adbd95777b6befb68780e1",
-      ".opencode/commands/watch-pr.md": "sha256:d2bfe0d59ac17a56511efef06111809fa2a423331aaf72c97de2f2390195685e",
+      ".opencode/commands/watch-pr.md": "sha256:2e9a5f250b07a0cd870db335651df5c0940c8225013eb0579b9a2aa7f6177ced",
       ".claude/commands/entropy-check.md": "sha256:3cdf6f4a18330c60f2a0e2e5b4831bb7ec13cbcbeb550f0c7a75f998b8ec7f08",
       ".opencode/commands/entropy-check.md": "sha256:0a34b205ca3810ee55e174e41aba322e8b745b1557284766d8045e21d92766b6",
       ".claude/agents/agent-infra-lifecycle-executor.md": "sha256:c3fb5e83ce91648f1f74122d13113a2a39ef025983c8920703a424187d4a2238",
       ".claude/agents/agent-infra-lifecycle-reviewer.md": "sha256:08c423761825b5211810ef4a28673c4e9a32e2fa64595d261dae47e7d9a8c1eb",
       ".codex/agents/agent-infra-lifecycle-executor.toml": "sha256:49dd60ccf8458178c3c0c71d3065bbcf931931bd7abee9a6395b3c28a983c676",
-      ".codex/agents/agent-infra-lifecycle-reviewer.toml": "sha256:0a359e4f454101e45a1271563bd205dad32fbd64e0a178698199f083c7efb96a"
+      ".codex/agents/agent-infra-lifecycle-reviewer.toml": "sha256:0a359e4f454101e45a1271563bd205dad32fbd64e0a178698199f083c7efb96a",
+      ".claude/rules/tool-preferences.md": "sha256:610984771f3af595a0b25a94942b5b0aea3ea2fd602c25633de7958dee336f9f"
     }
   },
   "task": {
