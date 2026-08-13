@@ -11,9 +11,13 @@ import { terminateProcessTree } from '../../../scripts/process-tree.js';
 
 const RUNNER = filePath('scripts/run-tests.js');
 
-function waitForClose(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => child.once('close', () => resolve()));
+type ProcessResult = { code: number | null; signal: NodeJS.Signals | null };
+
+function waitForClose(child: ChildProcess): Promise<ProcessResult> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
+  }
+  return new Promise((resolve) => child.once('close', (code, signal) => resolve({ code, signal })));
 }
 
 test('project test scripts use the sandbox-control-safe runner', () => {
@@ -130,7 +134,7 @@ test('test runner forwards termination signals', onPlatforms('linux', 'darwin'),
     "import fs from 'node:fs';",
     "test('wait', async () => {",
     "  fs.writeFileSync(process.env.AGENT_INFRA_TEST_READY, '');",
-    "  await new Promise(() => {});",
+    "  await new Promise((resolve) => setTimeout(resolve, 60_000));",
     '});',
     ''
   ].join('\n'));
@@ -145,10 +149,9 @@ test('test runner forwards termination signals', onPlatforms('linux', 'darwin'),
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.equal(fs.existsSync(ready), true, 'test process did not become ready');
+    const close = waitForClose(child);
     child.kill('SIGTERM');
-    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-      (resolve) => child.once('close', (code, signal) => resolve({ code, signal }))
-    );
+    const result = await close;
     assert.deepEqual(result, { code: null, signal: 'SIGTERM' });
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -160,12 +163,18 @@ test('test runner terminates the complete build process group', onPlatforms('lin
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-infra-test-runner-tree-'));
   const npm = path.join(root, 'npm');
   const ready = path.join(root, 'grandchild.pid');
+  const terminated = path.join(root, 'grandchild.terminated');
   fs.writeFileSync(npm, [
     '#!/usr/bin/env node',
-    "import fs from 'node:fs';",
     "import { spawn } from 'node:child_process';",
-    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
-    "fs.writeFileSync(process.env.AGENT_INFRA_TEST_READY, String(child.pid));",
+    "spawn(process.execPath, ['-e', `",
+    "  process.on('SIGTERM', () => {",
+    "    require('node:fs').writeFileSync(process.env.AGENT_INFRA_TEST_TERMINATED, String(process.pid));",
+    "    process.exit(0);",
+    "  });",
+    "  require('node:fs').writeFileSync(process.env.AGENT_INFRA_TEST_READY, String(process.pid));",
+    "  setInterval(() => {}, 1000);",
+    "`], { env: process.env, stdio: 'ignore' });",
     'setInterval(() => {}, 1000);',
     ''
   ].join('\n'));
@@ -175,7 +184,8 @@ test('test runner terminates the complete build process group', onPlatforms('lin
     env: {
       ...process.env,
       PATH: [root, process.env.PATH].filter(Boolean).join(path.delimiter),
-      AGENT_INFRA_TEST_READY: ready
+      AGENT_INFRA_TEST_READY: ready,
+      AGENT_INFRA_TEST_TERMINATED: terminated
     },
     stdio: 'ignore'
   });
@@ -187,23 +197,17 @@ test('test runner terminates the complete build process group', onPlatforms('lin
     }
     assert.equal(fs.existsSync(ready), true, 'build grandchild did not become ready');
     grandchildPid = Number(fs.readFileSync(ready, 'utf8'));
+    const close = waitForClose(runner);
     runner.kill('SIGTERM');
-    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-      (resolve) => runner.once('close', (code, signal) => resolve({ code, signal }))
-    );
+    const result = await close;
     assert.deepEqual(result, { code: null, signal: 'SIGTERM' });
 
     const exitDeadline = Date.now() + 2_000;
-    let alive = true;
-    while (alive && Date.now() < exitDeadline) {
-      try {
-        process.kill(grandchildPid, 0);
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      } catch {
-        alive = false;
-      }
+    while (!fs.existsSync(terminated) && Date.now() < exitDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    assert.equal(alive, false, 'build grandchild survived runner termination');
+    assert.equal(fs.existsSync(terminated), true, 'build grandchild did not receive SIGTERM');
+    assert.equal(Number(fs.readFileSync(terminated, 'utf8')), grandchildPid);
   } finally {
     if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
     if (grandchildPid) {
