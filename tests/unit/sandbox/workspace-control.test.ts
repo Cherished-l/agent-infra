@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { serveSandboxControl } from '../../../lib/sandbox/control/server.ts';
+import {
+  sandboxControlSafeEnv,
+  serveSandboxControl
+} from '../../../lib/sandbox/control/server.ts';
 import {
   bindSandboxControlTask,
   validateSandboxControlRequest,
@@ -58,6 +61,17 @@ test('branch-only sandboxes and incorrect tokens fail closed', () => {
     () => validateSandboxControlRequest({ ...request, token: 'wrong' }, manifest),
     /REQUEST_INVALID/
   );
+});
+
+test('control broker strips mixed-case sandbox authority from child environments', () => {
+  assert.deepEqual(sandboxControlSafeEnv({
+    agent_infra_control_token: 'live-token',
+    Agent_Infra_Control_Dir: 'live-channel',
+    aGeNt_InFrA_cOnTrOl_FuTuRe: 'future-authority',
+    AGENT_INFRA_TEST_SENTINEL: 'preserved'
+  }), {
+    AGENT_INFRA_TEST_SENTINEL: 'preserved'
+  });
 });
 
 test('control broker ownership is acquired exclusively', () => {

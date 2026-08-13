@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { INTERNAL_CLI_PATH } from '../../helpers.ts';
+import { INTERNAL_CLI_PATH, sandboxControlSafeEnv } from '../../helpers.ts';
 import { applyTaskEvent } from '../../../lib/task/events.ts';
 import { prepareOrchestrationDelegation } from '../../../lib/task/orchestration.ts';
 
@@ -244,7 +244,7 @@ test('completed event validates orchestration provenance before writing task sta
 
   const orchestrate = (args: string[]) => spawnSync(
     'node', [INTERNAL_CLI_PATH, 'task-orchestration', f.id, ...args],
-    { cwd: f.root, encoding: 'utf8' }
+    { cwd: f.root, encoding: 'utf8', env: sandboxControlSafeEnv() }
   );
   assert.equal(orchestrate([
     'begin-or-resume', '--client', 'claude-code',

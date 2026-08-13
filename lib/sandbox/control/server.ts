@@ -39,6 +39,14 @@ function writeResponse(directory: string, response: SandboxControlResponse): voi
   fs.renameSync(temporary, path.join(directory, `${response.id}.json`));
 }
 
+export function sandboxControlSafeEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([key]) => !key.toUpperCase().startsWith('AGENT_INFRA_CONTROL_')
+    )
+  );
+}
+
 export function serveSandboxControl(manifestPath: string, signal: AbortSignal = new AbortController().signal): void {
   const manifest = readManifest(manifestPath);
   const brokerPath = path.join(path.dirname(manifestPath), 'broker.json');
@@ -84,9 +92,7 @@ export function serveSandboxControl(manifestPath: string, signal: AbortSignal = 
           {
             cwd: manifest.repoRoot,
             encoding: 'utf8',
-            env: Object.fromEntries(
-              Object.entries(process.env).filter(([key]) => !key.startsWith('AGENT_INFRA_CONTROL_'))
-            )
+            env: sandboxControlSafeEnv()
           }
         );
         response = {

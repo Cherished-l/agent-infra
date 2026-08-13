@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-import { filePath, gitSafeEnv, INTERNAL_CLI_PATH } from '../../helpers.ts';
+import { filePath, gitSafeEnv, INTERNAL_CLI_PATH, sandboxControlSafeEnv } from '../../helpers.ts';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'task-orchestration-cli-'));
@@ -25,7 +25,7 @@ function run(root: string, args: string[], env?: NodeJS.ProcessEnv) {
   return spawnSync('node', [INTERNAL_CLI_PATH, 'task-orchestration', ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: gitSafeEnv(env)
+    env: sandboxControlSafeEnv(gitSafeEnv(env))
   });
 }
 

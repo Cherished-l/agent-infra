@@ -98,8 +98,7 @@ test("package metadata supports scoped npm publishing", () => {
     "smol-toml",
     "yaml"
   ]);
-  assert.match(pkg.scripts.prepublishOnly, /npm run build/);
-  assert.match(pkg.scripts.prepublishOnly, /--test/);
+  assert.match(pkg.scripts.prepublishOnly, /^node scripts\/run-tests\.js/);
   assert.match(pkg.scripts.prepublishOnly, /tests\/\*\*\/\*\.test\.ts/);
   assert.match(read("lib/platform/verification-sync.ts"), /createGitHubClient/);
 });

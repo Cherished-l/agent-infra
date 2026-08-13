@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { INTERNAL_CLI_PATH } from '../../helpers.ts';
+import { INTERNAL_CLI_PATH, sandboxControlSafeEnv } from '../../helpers.ts';
 
 const TASK_ID = 'TASK-20260101-000001';
 
@@ -20,9 +20,26 @@ function fixture() {
   return { root, dir };
 }
 
-function run(root: string, args: string[]) {
-  return spawnSync('node', [INTERNAL_CLI_PATH, 'task-lifecycle', ...args], { cwd: root, encoding: 'utf8' });
+function run(root: string, args: string[], env: NodeJS.ProcessEnv = sandboxControlSafeEnv()) {
+  return spawnSync('node', [INTERNAL_CLI_PATH, 'task-lifecycle', ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    env
+  });
 }
+
+test('task-lifecycle CLI stays inside its fixture with sandbox control authority removed', () => {
+  const f = fixture();
+  const env = sandboxControlSafeEnv({
+    ...process.env,
+    AGENT_INFRA_CONTROL_TOKEN: 'live-sandbox-token',
+    AGENT_INFRA_CONTROL_DIR: path.join(f.root, 'live-control-channel')
+  });
+  const result = run(f.root, [TASK_ID, 'complete', '--agent', 'codex'], env);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).taskId, TASK_ID);
+  assert.equal(fs.existsSync(path.join(f.root, '.agents', 'workspace', 'completed', TASK_ID, 'task.md')), true);
+});
 
 test('task-lifecycle CLI prints one JSON result and uses domain exit codes', () => {
   const f = fixture();

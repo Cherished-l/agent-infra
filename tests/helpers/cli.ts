@@ -1,4 +1,5 @@
 import path from "node:path";
+import { sandboxControlSafeEnv } from "../../lib/sandbox/control/server.ts";
 import { filePath } from "./paths.ts";
 
 const CLI_PATH = filePath("dist/bin/cli.js");
@@ -32,5 +33,6 @@ export {
   cliArgs,
   internalCliArgs,
   envWithPrependedPath,
-  pathWithPrependedBin
+  pathWithPrependedBin,
+  sandboxControlSafeEnv
 };

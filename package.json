@@ -58,13 +58,13 @@
     "demo:regen": "sh scripts/demo-regen.sh",
     "prepare": "git config core.hooksPath .git-hooks || true",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.jschecks.json --noEmit",
-    "test:smoke": "npm run build && node --experimental-strip-types --no-warnings --test \"tests/unit/**/*.test.ts\"",
-    "test:core": "npm run build && node --experimental-strip-types --no-warnings --test \"tests/unit/**/*.test.ts\" \"tests/integration/**/*.test.ts\"",
-    "test:integration": "npm run build && node --experimental-strip-types --no-warnings --test \"tests/integration/**/*.test.ts\" \"tests/e2e/**/*.test.ts\"",
+    "test:smoke": "node scripts/run-tests.js \"tests/unit/**/*.test.ts\"",
+    "test:core": "node scripts/run-tests.js \"tests/unit/**/*.test.ts\" \"tests/integration/**/*.test.ts\"",
+    "test:integration": "node scripts/run-tests.js \"tests/integration/**/*.test.ts\" \"tests/e2e/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
-    "test": "npm run build && node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\"",
-    "test:coverage": "npm run build && node --experimental-strip-types --no-warnings --test --experimental-test-coverage \"--test-coverage-exclude=tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.lcov \"tests/**/*.test.ts\"",
-    "prepublishOnly": "npm run build && node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\""
+    "test": "node scripts/run-tests.js \"tests/**/*.test.ts\"",
+    "test:coverage": "node scripts/run-tests.js --experimental-test-coverage \"--test-coverage-exclude=tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.lcov \"tests/**/*.test.ts\"",
+    "prepublishOnly": "node scripts/run-tests.js \"tests/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",

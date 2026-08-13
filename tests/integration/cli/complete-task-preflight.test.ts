@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { INTERNAL_CLI_PATH, gitSafeEnv } from '../../helpers.ts';
+import { INTERNAL_CLI_PATH, gitSafeEnv, sandboxControlSafeEnv } from '../../helpers.ts';
 
 const TASK_ID = 'TASK-20260101-000001';
 
@@ -35,7 +35,11 @@ function fixture() {
 }
 
 function run(root: string, args: string[]) {
-  return spawnSync(process.execPath, [INTERNAL_CLI_PATH, ...args], { cwd: root, encoding: 'utf8' });
+  return spawnSync(process.execPath, [INTERNAL_CLI_PATH, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    env: sandboxControlSafeEnv()
+  });
 }
 
 test('compiled preflight does not require a checks snapshot for a bound historical PR', () => {
@@ -76,7 +80,7 @@ test('compiled preflight does not require a checks snapshot for a bound historic
     ], {
       cwd: f.root,
       encoding: 'utf8',
-      env: gitSafeEnv(process.env)
+      env: sandboxControlSafeEnv(gitSafeEnv(process.env))
     });
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
