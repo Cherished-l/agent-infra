@@ -27,6 +27,8 @@ type AppServerTransportOptions = Readonly<{
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  rolloutReadAttempts?: number;
+  rolloutRetryMs?: number;
 }>;
 
 type CodexRuntimeIdentity = Readonly<{
@@ -37,10 +39,12 @@ type CodexRuntimeIdentity = Readonly<{
 
 const LIFECYCLE_HOOKS = Object.freeze([
   Object.freeze({ event: 'PreToolUse', matcher: '^collaborationspawn_agent$', phase: 'pre-tool' }),
-  Object.freeze({ event: 'PostToolUse', matcher: '^collaborationspawn_agent$', phase: 'post-tool' }),
-  Object.freeze({ event: 'SubagentStart', matcher: '^agent-infra-lifecycle-(executor|reviewer)$', phase: 'subagent-start' }),
-  Object.freeze({ event: 'SubagentStop', matcher: '^agent-infra-lifecycle-(executor|reviewer)$', phase: 'subagent-stop' })
+  Object.freeze({ event: 'PostToolUse', matcher: '', phase: 'post-tool' }),
+  Object.freeze({ event: 'SubagentStart', matcher: '', phase: 'subagent-start' }),
+  Object.freeze({ event: 'SubagentStop', matcher: '', phase: 'subagent-stop' })
 ]);
+const DEFAULT_ROLLOUT_READ_ATTEMPTS = 81;
+const DEFAULT_ROLLOUT_RETRY_MS = 100;
 
 function object(value: unknown): JsonObject | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -50,6 +54,65 @@ function object(value: unknown): JsonObject | null {
 
 function nonEmpty(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function resolveCodexSpawnedChild(
+  transcriptPath: string,
+  expected: Readonly<{
+    sessionId: string;
+    toolUseId: string;
+    nativeAgent: string;
+    taskName: string;
+    requestedModel?: string;
+    requestedReasoningEffort?: string;
+  }>
+): string {
+  const name = path.basename(transcriptPath);
+  if (!transcriptPath || (!name.endsWith(`-${expected.sessionId}.jsonl`) && name !== `${expected.sessionId}.jsonl`)) {
+    throw new Error('Codex parent rollout path is invalid');
+  }
+  const stat = fs.lstatSync(transcriptPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Codex parent rollout is not a regular file');
+  const maxBytes = 8 * 1024 * 1024;
+  const offset = Math.max(0, stat.size - maxBytes);
+  const buffer = Buffer.alloc(stat.size - offset);
+  const descriptor = fs.openSync(transcriptPath, 'r');
+  try {
+    fs.readSync(descriptor, buffer, 0, buffer.length, offset);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  let text = buffer.toString('utf8');
+  if (offset) text = text.slice(text.indexOf('\n') + 1);
+  const records = text.split(/\r?\n/).filter(Boolean).map((line) => object(JSON.parse(line))).filter(Boolean);
+  const calls = records.filter((record) => {
+    const payload = object(record?.payload);
+    return record?.type === 'response_item'
+      && payload?.type === 'function_call'
+      && payload.call_id === expected.toolUseId
+      && payload.namespace === 'collaboration'
+      && payload.name === 'spawn_agent';
+  });
+  if (calls.length !== 1) throw new Error('Codex parent rollout spawn call was not found uniquely');
+  const call = object(calls[0]?.payload);
+  const args = object(JSON.parse(nonEmpty(call?.arguments) ?? '{}'));
+  if (
+    args?.agent_type !== expected.nativeAgent
+    || args.task_name !== expected.taskName
+    || (expected.requestedModel && args.model !== expected.requestedModel)
+    || (expected.requestedReasoningEffort && args.reasoning_effort !== expected.requestedReasoningEffort)
+  ) throw new Error('Codex parent rollout spawn identity does not match the hook event');
+  const activities = records.filter((record) => {
+    const payload = object(record?.payload);
+    return record?.type === 'event_msg'
+      && payload?.type === 'sub_agent_activity'
+      && payload.event_id === expected.toolUseId
+      && payload.kind === 'started'
+      && payload.agent_path === `/root/${expected.taskName}`
+      && nonEmpty(payload.agent_thread_id);
+  });
+  if (activities.length !== 1) throw new Error('Codex parent rollout child activity was not found uniquely');
+  return nonEmpty(object(activities[0]?.payload)?.agent_thread_id)!;
 }
 
 function validateCodexLifecycleHookConfig(value: unknown): void {
@@ -63,7 +126,7 @@ function validateCodexLifecycleHookConfig(value: unknown): void {
       return entry.hooks.some((hookValue) => {
         const hook = object(hookValue);
         return hook?.type === 'command'
-          && hook.timeout === 5
+          && hook.timeout === 15
           && hook.command === `node "$(git rev-parse --show-toplevel)/.agents/hooks/lifecycle-delegation.js" --client codex --event ${phase}`;
       });
     });
@@ -120,26 +183,38 @@ function hasCodexRuntimeLiveness(
     });
 }
 
-function parseCodexThreadResolution(readValue: unknown, resumeValue: unknown): ThreadResolution {
+function parseCodexThreadResolution(readValue: unknown, rolloutRecords: readonly unknown[]): ThreadResolution {
   const readRoot = object(readValue);
-  const resumeRoot = object(resumeValue);
   const thread = object(readRoot?.thread);
-  const resumedThread = object(resumeRoot?.thread);
   const source = object(thread?.source);
   const subAgent = object(source?.subAgent);
   const threadSpawn = object(subAgent?.thread_spawn);
+  const sessionMeta = rolloutRecords
+    .map(object)
+    .find((record) => record?.type === 'session_meta');
+  const sessionPayload = object(sessionMeta?.payload);
+  const turnContext = rolloutRecords
+    .map(object)
+    .filter((record) => record?.type === 'turn_context')
+    .at(-1);
+  const turnPayload = object(turnContext?.payload);
   const childThreadId = nonEmpty(thread?.id);
   const parentThreadId = nonEmpty(thread?.parentThreadId);
   const sourceParentThreadId = nonEmpty(threadSpawn?.parent_thread_id);
-  const resumedChildThreadId = nonEmpty(resumedThread?.id);
-  const model = nonEmpty(resumeRoot?.model);
-  const reasoningEffort = nonEmpty(resumeRoot?.reasoningEffort ?? object(resumeRoot?.settings)?.effort);
+  const rolloutChildThreadId = nonEmpty(sessionPayload?.id);
+  const rolloutParentThreadId = nonEmpty(sessionPayload?.parent_thread_id);
+  const agentRole = nonEmpty(sessionPayload?.agent_role);
+  const model = nonEmpty(turnPayload?.model);
+  const reasoningEffort = nonEmpty(turnPayload?.effort);
   const forkedFromId = thread?.forkedFromId;
   if (
     !childThreadId
-    || resumedChildThreadId !== childThreadId
+    || rolloutChildThreadId !== childThreadId
     || !parentThreadId
     || !sourceParentThreadId
+    || rolloutParentThreadId !== parentThreadId
+    || rolloutParentThreadId !== sourceParentThreadId
+    || !/^agent-infra-lifecycle-(executor|reviewer)$/.test(agentRole ?? '')
     || !model
     || !reasoningEffort
     || (forkedFromId !== null && typeof forkedFromId !== 'string')
@@ -152,7 +227,8 @@ function parseCodexThreadResolution(readValue: unknown, resumeValue: unknown): T
       childThreadId,
       parentThreadId,
       forkedFromId,
-      sourceParentThreadId
+      sourceParentThreadId,
+      nativeAgent: agentRole!
     }),
     settings: Object.freeze({
       type: 'app-settings',
@@ -161,6 +237,49 @@ function parseCodexThreadResolution(readValue: unknown, resumeValue: unknown): T
       reasoningEffort
     })
   });
+}
+
+function readCodexRolloutRecords(readValue: unknown, childThreadId: string): readonly unknown[] {
+  const thread = object(object(readValue)?.thread);
+  const rolloutPath = nonEmpty(thread?.path);
+  const rolloutName = rolloutPath ? path.basename(rolloutPath) : '';
+  if (!rolloutPath || (rolloutName !== `${childThreadId}.jsonl` && !rolloutName.endsWith(`-${childThreadId}.jsonl`))) {
+    throw new Error('Codex App Server rollout path is invalid');
+  }
+  const stat = fs.statSync(rolloutPath);
+  if (!stat.isFile()) throw new Error('Codex App Server rollout path is not a regular file');
+  const maxBytes = 1024 * 1024;
+  const bytes = Math.min(stat.size, maxBytes);
+  const descriptor = fs.openSync(rolloutPath, 'r');
+  try {
+    const buffer = Buffer.alloc(bytes);
+    fs.readSync(descriptor, buffer, 0, bytes, 0);
+    const text = buffer.toString('utf8');
+    const completeText = stat.size <= maxBytes ? text : text.slice(0, text.lastIndexOf('\n'));
+    return Object.freeze(completeText.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line)));
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+async function resolveCodexRolloutRecords(
+  readValue: unknown,
+  childThreadId: string,
+  attempts: number,
+  retryMs: number
+): Promise<readonly unknown[]> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const records = readCodexRolloutRecords(readValue, childThreadId);
+      parseCodexThreadResolution(readValue, records);
+      return records;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, retryMs));
+    }
+  }
+  throw lastError;
 }
 
 function parseCodexTurnCompleted(value: unknown): Extract<CodexLifecycleEvent, { type: 'app-terminal' }> {
@@ -333,12 +452,17 @@ async function resolveCodexThread(
     const readResult = object(await transport.request('thread/read', { threadId: childThreadId, includeTurns: false }));
     const readThread = object(readResult?.thread);
     if (nonEmpty(readThread?.id) !== childThreadId) throw new Error('Codex App Server returned the wrong child thread');
-    const resumeResult = await transport.request('thread/resume', { threadId: childThreadId });
     let resolution: ThreadResolution;
     try {
-      resolution = parseCodexThreadResolution(readResult, resumeResult);
+      const rolloutRecords = await resolveCodexRolloutRecords(
+        readResult,
+        childThreadId,
+        options.rolloutReadAttempts ?? DEFAULT_ROLLOUT_READ_ATTEMPTS,
+        options.rolloutRetryMs ?? DEFAULT_ROLLOUT_RETRY_MS
+      );
+      resolution = parseCodexThreadResolution(readResult, rolloutRecords);
     } catch {
-      throw new Error('Codex App Server resumed settings are unavailable');
+      throw new Error('Codex App Server rollout metadata is unavailable');
     }
     const reroutes = transport.notifications
       .filter((entry) => entry.method === 'model/rerouted')
@@ -368,6 +492,8 @@ async function resolveCodexTerminal(
     if (nonEmpty(thread?.id) !== childThreadId) throw new Error('Codex App Server returned the wrong child thread');
     const turns = Array.isArray(thread?.turns) ? thread.turns : [];
     const turn = turns.at(-1);
+    const turnValue = object(turn);
+    if (!turnValue || turnValue.status === 'inProgress') throw new Error('CODEX_TURN_NOT_TERMINAL');
     return parseCodexTurnCompleted({ threadId: childThreadId, turn });
   } finally {
     transport.close();
@@ -434,6 +560,7 @@ export {
   parseCodexHooksList,
   parseCodexThreadResolution,
   parseCodexTurnCompleted,
+  resolveCodexSpawnedChild,
   preflightCodexLifecycleEvidence,
   resolveCodexTerminal,
   resolveCodexThread,

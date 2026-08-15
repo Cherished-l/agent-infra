@@ -18,7 +18,7 @@ interface RunOptions {
   hook?: string;
 }
 
-type LocalCliState = 'missing' | 'working' | 'broken';
+type LocalCliState = 'missing' | 'working' | 'broken' | 'source-with-stale-dist';
 
 function run(input: string, options: RunOptions = {}) {
   const {
@@ -42,17 +42,29 @@ function createHookFixture(localCliState: LocalCliState) {
   fs.mkdirSync(path.dirname(hook), { recursive: true });
   fs.mkdirSync(cwd, { recursive: true });
   fs.copyFileSync(HOOK, hook);
-  fs.writeFileSync(path.join(repoDir, 'package.json'), '{"type":"module"}\n');
+  fs.writeFileSync(
+    path.join(repoDir, 'package.json'),
+    JSON.stringify({
+      type: 'module',
+      ...(localCliState === 'source-with-stale-dist' ? { name: '@fitlab-ai/agent-infra' } : {})
+    })
+  );
   fs.writeFileSync(pathCli, "let input=''; process.stdin.setEncoding('utf8'); process.stdin.on('data',c=>input+=c); process.stdin.on('end',()=>process.stdout.write(JSON.stringify({ source: 'path', args: process.argv.slice(2), ...(input ? { input: JSON.parse(input) } : {}) })))\n");
   writeNodeCommandShim(path.join(binDir, 'agent-infra-internal'), pathCli);
 
   if (localCliState !== 'missing') {
     const localCli = path.join(repoDir, 'dist', 'bin', 'internal-cli.js');
     fs.mkdirSync(path.dirname(localCli), { recursive: true });
-    const localCliSource = localCliState === 'broken'
+    const localCliSource = localCliState === 'broken' || localCliState === 'source-with-stale-dist'
       ? "process.stderr.write('Local lifecycle CLI failed\\n'); process.exit(23)\n"
       : "let input=''; process.stdin.setEncoding('utf8'); process.stdin.on('data',c=>input+=c); process.stdin.on('end',()=>process.stdout.write(JSON.stringify({ source: 'local', args: process.argv.slice(2), ...(input ? { input: JSON.parse(input) } : {}) })))\n";
     fs.writeFileSync(localCli, localCliSource);
+  }
+
+  if (localCliState === 'source-with-stale-dist') {
+    const sourceCli = path.join(repoDir, 'bin', 'internal-cli.ts');
+    fs.mkdirSync(path.dirname(sourceCli), { recursive: true });
+    fs.writeFileSync(sourceCli, "process.stdout.write(JSON.stringify({ source: 'source', args: process.argv.slice(2) }))\n");
   }
 
   fs.mkdirSync(path.join(repoDir, '.codex'), { recursive: true });
@@ -166,6 +178,18 @@ test('lifecycle hook fails closed when the repository-local CLI fails', () => {
   assert.equal(result.stderr, 'Local lifecycle CLI failed\n');
 });
 
+test('lifecycle hook prefers checkout source over a stale dist CLI', () => {
+  const fixture = createHookFixture('source-with-stale-dist');
+
+  const result = run(
+    fs.readFileSync(path.join(FIXTURES, 'claude-subagent-stop.json'), 'utf8'),
+    fixture
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).source, 'source');
+});
+
 test('lifecycle hook rejects malformed payloads before invoking core', () => {
   const result = run('{');
   assert.equal(result.status, 1);
@@ -180,7 +204,7 @@ test('lifecycle hook normalizes Codex spawn and child events through stdin', () 
   );
   assert.equal(pre.status, 0, pre.stderr);
   const parsed = JSON.parse(pre.stdout);
-  assert.deepEqual(parsed.args, ['codex-lifecycle', 'hook-event', '--event', 'pre-tool']);
+  assert.deepEqual(parsed.args, ['codex-lifecycle', 'hook-event', '--event', 'pre-tool', '--bridge', 'true']);
   assert.deepEqual({
     sessionId: parsed.input.sessionId,
     turnId: parsed.input.turnId,
@@ -204,6 +228,29 @@ test('lifecycle hook normalizes Codex spawn and child events through stdin', () 
   });
   assert.equal(child.status, 0, child.stderr);
   const childParsed = JSON.parse(child.stdout);
-  assert.deepEqual(childParsed.args, ['codex-lifecycle', 'hook-event', '--event', 'subagent-start']);
+  assert.deepEqual(childParsed.args, ['codex-lifecycle', 'hook-event', '--event', 'subagent-start', '--bridge', 'true']);
+  assert.equal(childParsed.input.sessionId, 'codex-parent');
+  assert.equal(childParsed.input.turnId, 'codex-child-turn');
   assert.equal(childParsed.input.childThreadId, 'codex-child');
+});
+
+test('lifecycle hook forwards completed Codex waits and ignores timed out waits', () => {
+  const fixture = createHookFixture('working');
+  const base = {
+    hook_event_name: 'PostToolUse', session_id: 'codex-parent', turn_id: 'parent-turn',
+    tool_use_id: 'wait-tool', tool_name: 'collaborationwait_agent', tool_input: {}
+  };
+  const completed = run(JSON.stringify({
+    ...base, tool_response: JSON.stringify({ message: 'Wait completed.', timed_out: false })
+  }), { ...fixture, client: 'codex', event: 'post-tool', hook: fixture.hook });
+  assert.equal(completed.status, 0, completed.stderr);
+  const parsed = JSON.parse(completed.stdout);
+  assert.equal(parsed.input.toolName, 'collaborationwait_agent');
+  assert.equal(parsed.input.sessionId, 'codex-parent');
+
+  const timedOut = run(JSON.stringify({
+    ...base, tool_response: JSON.stringify({ message: 'Wait timed out.', timed_out: true })
+  }), { ...fixture, client: 'codex', event: 'post-tool', hook: fixture.hook });
+  assert.equal(timedOut.status, 0, timedOut.stderr);
+  assert.equal(timedOut.stdout, '');
 });

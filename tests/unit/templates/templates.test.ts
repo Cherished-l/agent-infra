@@ -193,12 +193,14 @@ test("templates do not contain legacy single-brace project or org placeholders",
   });
 });
 
-test("root and template gitignore both ignore node_modules", () => {
+test("root and template gitignore cover local dependency and lifecycle runtime paths", () => {
   const rootGitignore = read(".gitignore");
   const templateGitignore = read("templates/.gitignore");
 
-  assert.match(rootGitignore, /^node_modules\/$/m);
-  assert.match(templateGitignore, /^node_modules\/$/m);
+  for (const content of [rootGitignore, templateGitignore]) {
+    assert.match(content, /^node_modules\/$/m);
+    assert.match(content, /^\.agents\/workspace\/\.runtime\/$/m);
+  }
 });
 
 test("task templates include agent-infra version metadata", () => {
@@ -499,7 +501,7 @@ test("version format validation hooks are wired into templates and local config"
   ([
     [".codex/hooks.json", rootCodexHooks],
     ["templates/.codex/hooks.json", templateCodexHooks]
-  ] as Array<[string, { hooks?: Record<string, Array<{ matcher: string; hooks: Array<{ command: string }> }>> }]>).forEach(([relativePath, settings]) => {
+  ] as Array<[string, { hooks?: Record<string, Array<{ matcher: string; hooks: Array<{ command: string; timeout?: number }> }>> }]>).forEach(([relativePath, settings]) => {
     const preToolUse = settings.hooks?.PreToolUse ?? [];
     assert.deepEqual(
       preToolUse.find((entry) => entry.matcher === "^Bash$"),
@@ -518,15 +520,16 @@ test("version format validation hooks are wired into templates and local config"
     );
     const lifecycle = [
       ["PreToolUse", "^collaborationspawn_agent$", "pre-tool"],
-      ["PostToolUse", "^collaborationspawn_agent$", "post-tool"],
-      ["SubagentStart", "^agent-infra-lifecycle-(executor|reviewer)$", "subagent-start"],
-      ["SubagentStop", "^agent-infra-lifecycle-(executor|reviewer)$", "subagent-stop"]
+      ["PostToolUse", "", "post-tool"],
+      ["SubagentStart", "", "subagent-start"],
+      ["SubagentStop", "", "subagent-stop"]
     ] as const;
     for (const [event, matcher, phase] of lifecycle) {
       const entry = settings.hooks?.[event]?.find((candidate) => candidate.matcher === matcher);
       assert.equal(entry?.matcher, matcher, `${relativePath} should configure ${event} lifecycle matching`);
       assert.equal(entry?.hooks.length, 1, `${relativePath} should configure one ${event} lifecycle command`);
       assert.match(entry?.hooks[0]?.command ?? '', new RegExp(`--client codex --event ${phase}$`));
+      assert.equal(entry?.hooks[0]?.timeout, 15, `${relativePath} should allow the managed lifecycle bridge to complete`);
     }
   });
 });

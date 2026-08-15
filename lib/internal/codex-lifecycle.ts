@@ -10,11 +10,19 @@ import {
 } from '../agent-clients/adapters/codex-lifecycle/app-server.ts';
 import { createCodexLifecycleStore } from '../agent-clients/adapters/codex-lifecycle/store.ts';
 import type { CodexLifecycleEvent } from '../agent-clients/adapters/codex-lifecycle/evidence.ts';
+import {
+  activateCodexOrchestrationDelegation,
+  activateCodexSpawnDelegation,
+  reconcileCodexOrchestrationDelegation,
+  sealCodexOrchestrationDelegation,
+  sealCodexParentDelegation
+} from '../task/codex-orchestration.ts';
 
 const USAGE = 'Usage: agent-infra-internal codex-lifecycle <hook-event|resolve-start|resolve-stop|preflight|consume> [options]\n';
 const MANAGED_AGENT = /^agent-infra-lifecycle-(executor|reviewer)$/;
 
 type Parsed = Readonly<{ operation: string; values: Readonly<Record<string, string>> }>;
+type UnresolvedHookChild = Omit<Extract<CodexLifecycleEvent, { type: 'hook-child' }>, 'parentThreadId'>;
 
 function output(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -23,6 +31,15 @@ function output(value: unknown): void {
 function failure(code: string, message: string): void {
   output({ status: 'failed', changed: false, evidence: null, diagnostics: [], error: { code, message } });
   process.exitCode = 1;
+}
+
+function outputBridgeResult(result: Awaited<ReturnType<typeof activateCodexOrchestrationDelegation>>): void {
+  if (result.error?.code === 'ORCHESTRATION_DELEGATION_MISSING') {
+    output({ status: 'ignored', changed: false, evidence: null, diagnostics: [], error: null });
+    return;
+  }
+  output(result);
+  if (result.status !== 'running') process.exitCode = 1;
 }
 
 function parse(args: string[]): Parsed | null {
@@ -36,7 +53,7 @@ function parse(args: string[]): Parsed | null {
     return null;
   }
   const allowed = {
-    'hook-event': ['--event'],
+    'hook-event': ['--event', '--bridge'],
     'resolve-start': ['--child-id'],
     'resolve-stop': ['--child-id'],
     preflight: ['--format', '--session-id', '--turn-id', '--tool-use-id'],
@@ -85,7 +102,7 @@ async function readStdin(): Promise<unknown> {
   return JSON.parse(input || '{}') as unknown;
 }
 
-function recordFromPayload(phase: string, payload: unknown): CodexLifecycleEvent | null {
+function recordFromPayload(phase: string, payload: unknown): CodexLifecycleEvent | UnresolvedHookChild | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('Codex lifecycle hook payload must be an object');
   }
@@ -118,6 +135,13 @@ function recordFromPayload(phase: string, payload: unknown): CodexLifecycleEvent
   };
   if (phase === 'post-tool') return null;
   throw new Error(`unknown Codex lifecycle hook phase '${phase}'`);
+}
+
+function payloadText(payload: unknown, key: string): string {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    && typeof (payload as Record<string, unknown>)[key] === 'string'
+    ? (payload as Record<string, string>)[key]!
+    : '';
 }
 
 async function codexLifecycle(args: string[] = []): Promise<void> {
@@ -153,12 +177,92 @@ async function codexLifecycle(args: string[] = []): Promise<void> {
       if (!phase || !['pre-tool', 'subagent-start', 'post-tool', 'subagent-stop'].includes(phase)) {
         throw new Error('hook-event requires a known --event');
       }
-      const event = recordFromPayload(phase, await readStdin());
-      if (!event) {
+      if (parsed.values['--bridge'] !== undefined && parsed.values['--bridge'] !== 'true') {
+        throw new Error("hook-event --bridge must be 'true'");
+      }
+      const payload = await readStdin();
+      if (phase === 'post-tool' && parsed.values['--bridge'] === 'true') {
+        const toolName = payloadText(payload, 'toolName');
+        if (toolName === 'collaborationspawn_agent') {
+          const nativeAgent = payloadText(payload, 'nativeAgent');
+          if (!MANAGED_AGENT.test(nativeAgent)) {
+            output({ status: 'ignored', changed: false, evidence: null, diagnostics: [], error: null });
+            return;
+          }
+          const requestedModel = payloadText(payload, 'requestedModel');
+          const requestedReasoningEffort = payloadText(payload, 'requestedReasoningEffort');
+          const bridged = await activateCodexSpawnDelegation({
+            sessionId: payloadText(payload, 'sessionId'),
+            turnId: payloadText(payload, 'turnId'),
+            toolUseId: payloadText(payload, 'toolUseId'),
+            transcriptPath: payloadText(payload, 'transcriptPath'),
+            nativeAgent,
+            taskName: payloadText(payload, 'taskName'),
+            ...(requestedModel ? { requestedModel } : {}),
+            ...(requestedReasoningEffort ? { requestedReasoningEffort } : {})
+          }, { store });
+          outputBridgeResult(bridged);
+          return;
+        }
+        if (toolName === 'collaborationwait_agent') {
+          outputBridgeResult(await sealCodexParentDelegation(payloadText(payload, 'sessionId'), { store }));
+          return;
+        }
         output({ status: 'ignored', changed: false, evidence: null, diagnostics: [], error: null });
         return;
       }
+      const event = recordFromPayload(phase, payload);
+      if (!event) {
+        if (phase === 'post-tool' && parsed.values['--bridge'] === 'true') {
+          const value = payload as Record<string, unknown>;
+          const childThreadId = String(value.childThreadId ?? '');
+          const reconciled = reconcileCodexOrchestrationDelegation(childThreadId);
+          outputBridgeResult(reconciled);
+          return;
+        }
+        output({ status: 'ignored', changed: false, evidence: null, diagnostics: [], error: null });
+        return;
+      }
+      if (parsed.values['--bridge'] === 'true' && event.type === 'hook-stop') {
+        try {
+          if (store.read(event.childThreadId).consumer) {
+            const bridged = await sealCodexOrchestrationDelegation(event.childThreadId, { store });
+            outputBridgeResult(bridged);
+            return;
+          }
+        } catch {
+          // The normal apply path below owns missing or invalid evidence errors.
+        }
+      }
+      if (parsed.values['--bridge'] === 'true' && event.type === 'hook-child') {
+        const resolved = await resolveCodexThread(event.childThreadId);
+        store.apply({
+          ...event,
+          parentThreadId: resolved.resolution.thread.parentThreadId
+        });
+        const bridged = await activateCodexOrchestrationDelegation(event.childThreadId, {
+          store,
+          resolveThread: async () => resolved
+        });
+        outputBridgeResult(bridged);
+        return;
+      }
+      if (event.type === 'hook-child') {
+        const resolved = await resolveCodexThread(event.childThreadId);
+        const result = store.apply({
+          ...event,
+          parentThreadId: resolved.resolution.thread.parentThreadId
+        });
+        output({ status: result.state.status, changed: true, evidence: result.state, diagnostics: resolved.diagnostics, error: result.state.error });
+        if (result.state.status === 'invalid') process.exitCode = 1;
+        return;
+      }
       const result = store.apply(event);
+      if (parsed.values['--bridge'] === 'true' && event.type === 'hook-stop') {
+        const bridged = await sealCodexOrchestrationDelegation(event.childThreadId, { store });
+        outputBridgeResult(bridged);
+        return;
+      }
       output({ status: result.state.status, changed: true, evidence: result.state, diagnostics: [], error: result.state.error });
       if (result.state.status === 'invalid') process.exitCode = 1;
       return;

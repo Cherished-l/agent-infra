@@ -21,7 +21,9 @@ type CodexLifecycleEvent =
       sessionId: string;
       turnId: string;
       childThreadId: string;
+      parentThreadId: string;
       nativeAgent: string;
+      source?: 'hook' | 'parent-rollout';
     }>
   | Readonly<{
       type: 'app-thread';
@@ -29,6 +31,7 @@ type CodexLifecycleEvent =
       parentThreadId: string;
       forkedFromId: string | null;
       sourceParentThreadId: string;
+      nativeAgent: string;
     }>
   | Readonly<{
       type: 'app-settings';
@@ -56,6 +59,7 @@ type CodexLifecycleEvent =
       turnId: string;
       childThreadId: string;
       nativeAgent: string;
+      source?: 'hook' | 'parent-rollout';
     }>;
 
 type CodexStartEvidence = Readonly<{
@@ -79,7 +83,7 @@ type CodexStopEvidence = Readonly<{
   childThreadId: string;
   turnId: string;
   terminalStatus: 'completed';
-  hookStopObserved: true;
+  hookStopObserved: boolean;
 }>;
 
 type CodexLifecycleStatus =
@@ -153,19 +157,31 @@ function requiredStrings(event: CodexLifecycleEvent): boolean {
 function derive(state: CodexLifecycleState): CodexLifecycleState {
   const { spawn, child, thread, settings, reroute, terminal, stop } = state;
   if (spawn && child && (
-    spawn.sessionId !== child.sessionId
+    spawn.sessionId !== child.parentThreadId
     || spawn.nativeAgent !== child.nativeAgent
   )) {
     return invalid(state, 'CODEX_EVIDENCE_IDENTITY_MISMATCH', 'hook spawn and child identity do not match');
   }
+  if (child && child.sessionId !== child.parentThreadId) {
+    return invalid(state, 'CODEX_EVIDENCE_IDENTITY_MISMATCH', 'child event session does not match the parent thread');
+  }
   if (child && thread && child.childThreadId !== thread.childThreadId) {
     return invalid(state, 'CODEX_EVIDENCE_IDENTITY_MISMATCH', 'hook and App Server child identity do not match');
+  }
+  if (child && thread && child.nativeAgent !== thread.nativeAgent) {
+    return invalid(state, 'CODEX_EVIDENCE_IDENTITY_MISMATCH', 'hook and App Server agent roles do not match');
+  }
+  if (child && thread && child.parentThreadId !== thread.parentThreadId) {
+    return invalid(state, 'CODEX_EVIDENCE_PARENT_MISMATCH', 'hook and App Server parent identity do not match');
   }
   if (spawn && thread && (
     thread.parentThreadId !== spawn.sessionId
     || thread.sourceParentThreadId !== spawn.sessionId
   )) {
     return invalid(state, 'CODEX_EVIDENCE_PARENT_MISMATCH', 'App Server parent identity does not match the spawning session');
+  }
+  if (spawn && thread && spawn.nativeAgent !== thread.nativeAgent) {
+    return invalid(state, 'CODEX_EVIDENCE_IDENTITY_MISMATCH', 'spawn and App Server agent roles do not match');
   }
   if (thread?.forkedFromId !== null && thread?.forkedFromId !== undefined) {
     return invalid(state, 'CODEX_EVIDENCE_FORK_FORBIDDEN', 'forked child threads are not fresh lifecycle evidence');
@@ -233,7 +249,7 @@ function derive(state: CodexLifecycleState): CodexLifecycleState {
       childThreadId: startEvidence.childThreadId,
       turnId: terminal.turnId,
       terminalStatus: 'completed',
-      hookStopObserved: true
+      hookStopObserved: stop.source !== 'parent-rollout'
     });
   }
   const status: CodexLifecycleStatus = stopEvidence

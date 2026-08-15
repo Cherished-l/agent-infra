@@ -131,7 +131,7 @@ function createCodexLifecycleStore(options: CodexLifecycleStoreOptions) {
     if (event.type === 'hook-child') {
       const matches = recordFiles(root).filter((file) => {
         const state = readRecord(file).state;
-        return state.spawn?.sessionId === event.sessionId
+        return state.spawn?.sessionId === event.parentThreadId
           && state.spawn.nativeAgent === event.nativeAgent
           && (!state.child || state.child.childThreadId === event.childThreadId);
       });
@@ -179,6 +179,45 @@ function createCodexLifecycleStore(options: CodexLifecycleStoreOptions) {
     });
   }
 
+  function applyToSpawn(
+    identity: Readonly<{ sessionId: string; turnId: string; toolUseId: string }>,
+    event: Extract<CodexLifecycleEvent, { type: 'hook-child' }>
+  ): CodexLifecycleStoreResult {
+    return withWriteLock(() => {
+      const file = path.join(root, `${digest(`${identity.sessionId}\0${identity.turnId}\0${identity.toolUseId}`)}.json`);
+      if (!fs.existsSync(file)) throw new Error('Codex lifecycle spawn identity was not found');
+      const current = readRecord(file);
+      if (current.consumer) throw new Error(`Codex lifecycle evidence was already consumed by '${current.consumer}'`);
+      if (
+        current.state.spawn?.sessionId !== identity.sessionId
+        || current.state.spawn.turnId !== identity.turnId
+        || current.state.spawn.toolUseId !== identity.toolUseId
+      ) throw new Error('Codex lifecycle spawn identity does not match the stored event');
+      const nextState = reduceCodexLifecycleEvent(current.state, event);
+      const next = Object.freeze({
+        ...current,
+        revision: current.revision + 1,
+        state: nextState,
+        updatedAt: now()
+      });
+      writeRecord(file, next, current.revision);
+      return Object.freeze({ path: file, revision: next.revision, state: next.state });
+    });
+  }
+
+  function findByParent(parentThreadId: string): readonly StoredCodexLifecycle[] {
+    const matches = recordFiles(root)
+      .map(readRecord)
+      .filter((record) => record.state.startEvidence?.parentThreadId === parentThreadId
+        && ['start-ready', 'observed-terminal', 'stop-ready'].includes(record.state.status));
+    const unconsumed = matches.filter((record) => !record.consumer);
+    if (unconsumed.length > 1) throw new Error(`Codex lifecycle parent '${parentThreadId}' has ambiguous active children`);
+    if (unconsumed.length === 1) return Object.freeze(unconsumed);
+    return Object.freeze(matches
+      .filter((record) => record.consumer && record.state.status === 'stop-ready')
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  }
+
   function read(childThreadId: string): StoredCodexLifecycle {
     const matches = findByChild(childThreadId);
     if (matches.length !== 1) throw new Error(`Codex lifecycle child '${childThreadId}' was not found uniquely`);
@@ -196,7 +235,16 @@ function createCodexLifecycleStore(options: CodexLifecycleStoreOptions) {
       if (matches.length !== 1) throw new Error(`Codex lifecycle child '${childThreadId}' was not found uniquely`);
       const file = matches[0]!;
       const current = readRecord(file);
-      if (current.consumer) throw new Error(`Codex lifecycle evidence was already consumed by '${current.consumer}'`);
+      if (current.consumer) {
+        if (current.consumer !== consumer) {
+          throw new Error(`Codex lifecycle evidence was already consumed by '${current.consumer}'`);
+        }
+        if (
+          expectedHookDefinitionHash
+          && current.state.startEvidence?.hookDefinitionHash !== expectedHookDefinitionHash
+        ) throw new Error('Codex lifecycle hook definition hash is stale');
+        return current;
+      }
       if (current.state.status !== 'stop-ready') throw new Error('Codex lifecycle evidence is not stop-ready');
       if (
         expectedHookDefinitionHash
@@ -239,7 +287,7 @@ function createCodexLifecycleStore(options: CodexLifecycleStoreOptions) {
     });
   }
 
-  return Object.freeze({ root, apply, consume, expireBefore, read });
+  return Object.freeze({ root, apply, applyToSpawn, consume, expireBefore, findByParent, read });
 }
 
 export { createCodexLifecycleStore };
