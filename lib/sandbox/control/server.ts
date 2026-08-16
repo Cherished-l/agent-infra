@@ -21,6 +21,11 @@ import {
   writeSandboxControlStatus
 } from './state.ts';
 import { validateSandboxControlRequest } from './protocol.ts';
+import {
+  acquireSandboxControlBrokerStartup,
+  isSandboxControlRootQuiescing,
+  readSandboxControlManifest
+} from './lifecycle.ts';
 
 type ActiveExecution = {
   request: SandboxControlRequest;
@@ -29,26 +34,6 @@ type ActiveExecution = {
   failure: unknown;
   settled: boolean;
 };
-
-function readManifest(manifestPath: string): SandboxControlManifest {
-  const stat = fs.lstatSync(manifestPath);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('SANDBOX_CONTROL_MANIFEST_INVALID');
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Partial<SandboxControlManifest>;
-  if (manifest.version !== 3) {
-    throw new Error('SANDBOX_CONTROL_MANIFEST_VERSION_INVALID: expected version 3; container-only recreation is required');
-  }
-  if (typeof manifest.repoRoot !== 'string' || typeof manifest.worktreeRoot !== 'string'
-    || typeof manifest.channelDir !== 'string' || typeof manifest.publicStatusDir !== 'string'
-    || typeof manifest.processingDir !== 'string' || typeof manifest.token !== 'string'
-    || typeof manifest.generation !== 'string') throw new Error('SANDBOX_CONTROL_MANIFEST_INVALID');
-  const root = path.dirname(path.resolve(manifestPath));
-  if (path.resolve(manifest.channelDir) !== path.join(root, 'channel')
-    || path.resolve(manifest.publicStatusDir) !== path.join(root, 'public')
-    || path.resolve(manifest.processingDir) !== path.join(root, 'processing')) {
-    throw new Error('SANDBOX_CONTROL_MANIFEST_INVALID');
-  }
-  return manifest as SandboxControlManifest;
-}
 
 function assertRealDirectory(directory: string, parent?: string): void {
   const stat = fs.lstatSync(directory);
@@ -161,26 +146,35 @@ export async function serveSandboxControl(
   manifestPath: string,
   signal: AbortSignal = new AbortController().signal
 ): Promise<void> {
-  const manifest = readManifest(manifestPath);
+  const manifest = readSandboxControlManifest(manifestPath);
   const root = path.dirname(manifestPath);
+  const startTime = getProcessStartTime(process.pid);
+  if (!startTime) throw new Error('SANDBOX_CONTROL_BROKER_IDENTITY_UNAVAILABLE');
+  const releaseStartup = await acquireSandboxControlBrokerStartup(root, { pid: process.pid, startTime });
   const requestsDir = path.join(manifest.channelDir, 'requests');
   const responsesDir = path.join(manifest.channelDir, 'responses');
   const consumedDir = path.join(root, 'consumed');
-  for (const directory of [manifest.channelDir, requestsDir, responsesDir, consumedDir, manifest.publicStatusDir, manifest.processingDir]) {
-    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  }
-  assertRealDirectory(manifest.channelDir);
-  assertRealDirectory(requestsDir, manifest.channelDir);
-  assertRealDirectory(responsesDir, manifest.channelDir);
-  assertRealDirectory(consumedDir, root);
-  assertRealDirectory(manifest.publicStatusDir, root);
-  assertRealDirectory(manifest.processingDir, root);
-  const startTime = getProcessStartTime(process.pid);
-  if (!startTime) throw new Error('SANDBOX_CONTROL_BROKER_IDENTITY_UNAVAILABLE');
   const broker = { pid: process.pid, startTime };
   const brokerPath = path.join(root, 'broker.json');
   const brokerRecord = `${JSON.stringify({ version: 2, ...broker, token: manifest.token, generation: manifest.generation })}\n`;
-  fs.writeFileSync(brokerPath, brokerRecord, { mode: 0o600, flag: 'wx' });
+  try {
+    for (const directory of [manifest.channelDir, requestsDir, responsesDir, consumedDir, manifest.publicStatusDir, manifest.processingDir]) {
+      fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    }
+    assertRealDirectory(manifest.channelDir);
+    assertRealDirectory(requestsDir, manifest.channelDir);
+    assertRealDirectory(responsesDir, manifest.channelDir);
+    assertRealDirectory(consumedDir, root);
+    assertRealDirectory(manifest.publicStatusDir, root);
+    assertRealDirectory(manifest.processingDir, root);
+    fs.writeFileSync(brokerPath, brokerRecord, { mode: 0o600, flag: 'wx' });
+    if (isSandboxControlRootQuiescing(root)) {
+      if (fs.readFileSync(brokerPath, 'utf8') === brokerRecord) fs.unlinkSync(brokerPath);
+      return;
+    }
+  } finally {
+    releaseStartup();
+  }
   let active: ActiveExecution | null = null;
   let lastState = '';
   let lastStatusAt = 0;
@@ -191,7 +185,7 @@ export async function serveSandboxControl(
     while (!signal.aborted) {
       let current: SandboxControlManifest;
       try {
-        current = readManifest(manifestPath);
+        current = readSandboxControlManifest(manifestPath);
       } catch {
         break;
       }
