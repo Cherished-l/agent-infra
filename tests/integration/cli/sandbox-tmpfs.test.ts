@@ -156,6 +156,7 @@ function recoveryFixtureMounts(config: SandboxConfig): Array<Record<string, unkn
       Type: "bind", Source: hostPath, Destination: path.posix.join("/workspace/.agents/workspace", state), RW: false
     })),
     { Type: "bind", Source: path.join(config.controlBase, config.project, "demo-dev-feature..demo", control, "channel"), Destination: "/run/agent-infra/control", RW: true },
+    { Type: "bind", Source: path.join(config.controlBase, config.project, "demo-dev-feature..demo", control, "public"), Destination: "/run/agent-infra/control-status", RW: false },
     { Type: "bind", Source: path.join(config.shareBase, "common"), Destination: "/share/common", RW: true },
     { Type: "bind", Source: path.join(config.shareBase, "branches", branchDir), Destination: "/share/branch", RW: true },
     { Type: "bind", Source: path.join(config.shellConfigBase, branchDir), Destination: "/home/devuser/.host-shell-config", RW: false },
@@ -383,6 +384,7 @@ test("running permission repair re-assesses seed targets before hydration", asyn
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-recovery-permissions-"));
   const config = recoveryFixtureConfig(tmpDir);
   let permissionsRepaired = false;
+  let brokerChecks = 0;
   const writes: string[][] = [];
 
   try {
@@ -398,6 +400,7 @@ test("running permission repair re-assesses seed targets before hydration", asyn
         index: 1
       },
       deps: {
+        ensureControlBroker: async () => { brokerChecks += 1; },
         run: () => JSON.stringify([{
           Id: "fixture-container-id",
           Config: { Labels: BRANCH_ONLY_LABELS },
@@ -421,6 +424,7 @@ test("running permission repair re-assesses seed targets before hydration", asyn
     });
 
     assert.equal(result.path, "recovered");
+    assert.equal(brokerChecks, 1);
     assert.equal(
       writes.some((args) => args.includes("rm") || args.includes("cp")),
       false,
@@ -513,6 +517,7 @@ test("recovery rejects mount and identity hard failures before writes", async ()
               index: 1
             },
             deps: {
+              ensureControlBroker: async () => {},
               start: () => {},
               run: () => JSON.stringify([{
                 Id: "fixture-container-id",
@@ -553,6 +558,7 @@ test("hard recovery failure requires explicit container replacement authorizatio
     )
   }]);
   const deps = {
+    ensureControlBroker: async () => {},
     run: () => inspect(),
     runOk: () => true,
     runVerbose: (_engine: string, _cmd: string, args: string[]) => {
@@ -598,6 +604,66 @@ test("hard recovery failure requires explicit container replacement authorizatio
     assert.equal(result.path, "recreated");
     assert.equal(result.container, "demo-dev-feature..demo");
     assert.equal(writes, 2);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("control broker readiness failure enters the explicit container replacement boundary", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-infra-broker-recreate-"));
+  let recreated = false;
+  const replacementCommands: string[][] = [];
+  const config = recoveryFixtureConfig(tmpDir);
+  const inspect = () => JSON.stringify([{
+    Id: "fixture-container-id",
+    Config: { Labels: BRANCH_ONLY_LABELS },
+    Mounts: recoveryFixtureMounts(config)
+  }]);
+  const deps = {
+    ensureControlBroker: async () => {
+      throw new Error("SANDBOX_CONTROL_MANIFEST_VERSION_INVALID: expected version 3; recreate the sandbox");
+    },
+    run: () => inspect(),
+    runOk: () => true,
+    runVerbose: (_engine: string, _cmd: string, args: string[]) => {
+      replacementCommands.push(args);
+    },
+    fetchRows: () => ({
+      running: [{ name: "demo-dev-feature..demo", status: "Up", branch: "feature/demo", running: true, index: 1 }],
+      nonRunning: []
+    })
+  };
+  const row = {
+    name: "demo-dev-feature..demo",
+    status: "Up",
+    branch: "feature/demo",
+    running: true,
+    index: 1
+  };
+
+  try {
+    await assert.rejects(
+      () => ensureSandboxReady({ config, engine: "native", branch: "feature/demo", row, deps }),
+      /Re-run with --recreate/
+    );
+    assert.deepEqual(replacementCommands, []);
+
+    const result = await ensureSandboxReady({
+      config,
+      engine: "native",
+      branch: "feature/demo",
+      row,
+      allowRecreate: true,
+      recreate: async () => { recreated = true; },
+      writeWarning: () => {},
+      deps
+    });
+    assert.equal(recreated, true);
+    assert.deepEqual(replacementCommands, [
+      ["stop", "demo-dev-feature..demo"],
+      ["rm", "demo-dev-feature..demo"]
+    ]);
+    assert.equal(result.path, "recreated");
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

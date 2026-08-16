@@ -296,6 +296,7 @@ test("workflow skills document state check gates", () => {
     "code-task",
     "review-code",
     "complete-manual-validation",
+    "run-manual-validation",
     "complete-task"
   ].forEach((skill) => {
     skillDocPaths(skill).forEach((relativePath) => {
@@ -322,6 +323,7 @@ test("workflow state-check consumers use the typed task snapshot entrypoint", ()
     "code-task",
     "review-code",
     "complete-manual-validation",
+    "run-manual-validation",
     "complete-task"
   ].forEach((skill) => {
     skillDocPaths(skill).forEach((relativePath) => {
@@ -470,6 +472,7 @@ test("workflow verification consumers declare their business verification events
     "code-task": ["code.completed"],
     "review-code": ["review-code.completed"],
     "complete-manual-validation": ["manual-validation.completed"],
+    "run-manual-validation": ["validation-run.completed"],
     "block-task": ["block-task.completed"],
     "cancel-task": ["cancel-task.completed"],
     "commit": ["commit.completed"],
@@ -558,7 +561,8 @@ test("workflow verify config language variants keep only artifact language field
     "review-plan",
     "code-task",
     "review-code",
-    "complete-task"
+    "complete-task",
+    "run-manual-validation"
   ];
 
   skills.forEach((skill) => {
@@ -1225,7 +1229,7 @@ test("skills that write timestamps require date command guidance", () => {
 });
 
 test("artifact lifecycle skills use core context and events in every language variant", () => {
-  for (const skill of ["analyze-task", "review-analysis", "plan-task", "review-plan", "code-task", "review-code", "complete-manual-validation"]) {
+  for (const skill of ["analyze-task", "review-analysis", "plan-task", "review-plan", "code-task", "review-code", "complete-manual-validation", "run-manual-validation"]) {
     for (const relativePath of skillDocPaths(skill)) {
       const content = read(relativePath);
       assert.match(content, /agent-infra-internal task-artifact \{task-id\} inspect --family /, `${relativePath} should resolve artifact context through the core`);
@@ -1360,6 +1364,24 @@ test("workflow skill docs update task comments before publishing artifact commen
   });
 });
 
+test("run-manual-validation uses complete typed comment sync intents in order", () => {
+  const taskSync = "platform-comment sync {task-id} --kind task --agent {standard-agent-token}";
+  const artifactSync = "platform-comment sync {task-id} --kind artifact --artifact {artifact} --agent {standard-agent-token}";
+
+  skillDocPaths("run-manual-validation").forEach((relativePath) => {
+    const content = read(relativePath);
+    const taskSyncIndex = content.indexOf(taskSync);
+    const artifactSyncIndex = content.indexOf(artifactSync);
+
+    assert.notEqual(taskSyncIndex, -1, `${relativePath} should invoke the complete task comment sync intent`);
+    assert.notEqual(artifactSyncIndex, -1, `${relativePath} should invoke the complete artifact comment sync intent`);
+    assert.ok(
+      taskSyncIndex < artifactSyncIndex,
+      `${relativePath} should sync the task comment before publishing the artifact comment`
+    );
+  });
+});
+
 test("review-pr keeps the sync -> write-back -> re-sync -> verify closed-loop order (PL-8)", () => {
   const variants = [
     ".agents/skills/review-pr/SKILL.md",
@@ -1406,6 +1428,7 @@ test("platform workflow docs delegate comment mechanics to internal intents", ()
     "cancel-task": "platform-comment sync {task-id}",
     "code-task": "platform-comment sync {task-id}",
     "complete-manual-validation": "platform-comment sync {task-id}",
+    "run-manual-validation": "platform-comment sync {task-id}",
     "complete-task": "platform-comment sync {task-id}",
     "create-task": "platform-comment sync {task-id}",
     "import-issue": "platform-comment list --issue {issue-number}",
@@ -1611,6 +1634,11 @@ test("analyze-task brainstorming gate adds step 4 and whitelists analyze-task in
     read(".agents/rules/no-mid-flow-questions.md"),
     read("templates/.agents/rules/no-mid-flow-questions.zh-CN.md"),
     "deployed no-mid-flow-questions rule should stay byte-identical to its zh-CN template variant"
+  );
+  assert.equal(
+    read(".agents/skills/run-manual-validation/SKILL.md"),
+    read("templates/.agents/skills/run-manual-validation/SKILL.zh-CN.md"),
+    "deployed run-manual-validation SKILL should stay byte-identical to its zh-CN template variant"
   );
 });
 
