@@ -1,7 +1,9 @@
 {
   "skill": "run-manual-validation",
   "checks": {
-    "task-meta": { "required_fields": ["id", "type", "workflow", "status", "created_at", "updated_at", "agent_infra_version", "current_step", "assigned_to"] },
+    "task-meta": {
+      "required_fields": ["id", "type", "workflow", "status", "created_at", "updated_at", "agent_infra_version", "current_step", "assigned_to"]
+    },
     "artifact": {
       "file_pattern": "validation-run.md|validation-run-r{N}.md",
       "required_sections": ["State Check", "Validation Target", "Mode Decision", "Command Summary", "Structured Evidence", "Cleanup and Recovery", "Remaining Coverage", "Raw Evidence"],
@@ -9,6 +11,15 @@
     },
     "activity-log": { "expected_action_pattern": "Run Manual Validation \\(Round \\d+\\)" },
     "review-ledger": { "stage_scope": ["analysis", "plan", "code"] },
-    "platform-sync": { "when": "issue_number_exists", "expected_comment_marker": "<!-- sync-issue:{task-id}:{artifact-stem} -->", "verify_comment_content": true, "verify_task_comment_content": true, "verify_issue_type": true, "verify_issue_fields": false, "verify_milestone": true, "expected_comment_marker_key": "artifact" }
+    "platform-sync": {
+      "when": "issue_number_exists",
+      "expected_comment_marker": "<!-- sync-issue:{task-id}:{artifact-stem} -->",
+      "verify_comment_content": true,
+      "verify_task_comment_content": true,
+      "verify_issue_type": true,
+      "verify_issue_fields": false,
+      "verify_milestone": true,
+      "expected_comment_marker_key": "artifact"
+    }
   }
 }
